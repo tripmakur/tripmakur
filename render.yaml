@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tripmakur
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: API_KEY
+        sync: false  # add your AviationStack API key manually in the Render dashboard
+    autoDeploy: true
+    healthCheckPath: "/"
