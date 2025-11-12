@@ -28,7 +28,7 @@ def home():
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     flight_info = None
-    uploaded_results = last_results  # Display previous results if any
+    uploaded_results = last_results  # show previous results if any
 
     # Manual flight lookup
     if request.method == "POST" and "airline" in request.form:
@@ -55,3 +55,27 @@ def flight_status():
                 "departure": "Unknown",
                 "arrival": "Unknown",
                 "status": "Not Found"
+            }
+
+    return render_template("flight_status.html", flight_info=flight_info, uploaded_results=uploaded_results)
+
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    global last_results
+    if "file" not in request.files:
+        flash("No file part")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        flash("No selected file")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    if file and allowed_file(file.filename):
+        try:
+            df = pd.read_excel(file)
+        except Exception as e:
+            flash(f"Error reading Excel file: {e}")
+            return ren
