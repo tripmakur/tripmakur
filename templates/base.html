@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title or "TripMakur" }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
+  <nav class="bg-blue-700 text-white p-4">
+    <div class="max-w-6xl mx-auto flex justify-between items-center">
+      <a href="/" class="font-bold text-xl">TripMakur</a>
+      <div>
+        <a href="/" class="px-4 hover:underline">Home</a>
+        <a href="/flight-status" class="px-4 hover:underline">Flight Status</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-grow max-w-6xl mx-auto mt-10 p-6 bg-white shadow rounded-xl">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center mt-10 py-4 text-gray-500 border-t">
+    <p>© 2025 TripMakur. All rights reserved.</p>
+  </footer>
+</body>
+</html>
