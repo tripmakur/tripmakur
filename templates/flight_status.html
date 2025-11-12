@@ -40,7 +40,7 @@
 
     <!-- Excel Upload Results -->
     {% if uploaded_results %}
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto mb-4">
         <h3 class="font-bold mb-2">Flight Status Results</h3>
         <table class="w-full border-collapse text-center">
             <thead class="bg-blue-100">
@@ -70,7 +70,13 @@
             </tbody>
         </table>
     </div>
-    {% endif %}
 
+    <!-- Download Button -->
+    <div class="mb-4">
+        <a href="{{ url_for('download_excel') }}" class="bg-blue-500 text-white px-4 py-2 rounded">
+            Download as Excel
+        </a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
