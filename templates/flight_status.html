@@ -1,74 +1,40 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="text-3xl font-bold text-blue-700 mb-6 text-center">Flight Status Dashboard</h1>
+<div class="container">
+    <h1>Flight Status Checker</h1>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-  <input id="airline" type="text" placeholder="Airline (AA)" class="border p-2 rounded-lg">
-  <input id="flight_number" type="text" placeholder="Flight #" class="border p-2 rounded-lg">
-  <input id="departure" type="text" placeholder="From (DFW)" class="border p-2 rounded-lg">
-  <input id="arrival" type="text" placeholder="To (LAX)" class="border p-2 rounded-lg">
+    <!-- Manual Flight Lookup -->
+    <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-4">
+        <div>
+            <label>Airline Code (e.g. DL):</label>
+            <input type="text" name="airline" required>
+        </div>
+        <div>
+            <label>Flight Number (e.g. 1234):</label>
+            <input type="text" name="flight_number" required>
+        </div>
+        <button type="submit">Check Status</button>
+    </form>
+
+    <!-- Excel Upload -->
+    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="card p-4">
+        <h3>Upload Excel File</h3>
+        <p>Upload a spreadsheet with columns: <strong>Airline, FlightNumber, From, To</strong></p>
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">Upload & Check Flights</button>
+    </form>
+
+    {% if flight_info %}
+    <div class="card mt-4 p-4">
+        <h3>Result</h3>
+        <ul>
+            <li><strong>Airline:</strong> {{ flight_info.airline }}</li>
+            <li><strong>Flight Number:</strong> {{ flight_info.flight_number }}</li>
+            <li><strong>From:</strong> {{ flight_info.departure }}</li>
+            <li><strong>To:</strong> {{ flight_info.arrival }}</li>
+            <li><strong>Status:</strong> {{ flight_info.status }}</li>
+        </ul>
+    </div>
+    {% endif %}
 </div>
-
-<div class="text-center mb-6">
-  <button id="checkBtn" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
-    Check Status
-  </button>
-</div>
-
-<table class="w-full border-collapse text-center">
-  <thead class="bg-blue-100">
-    <tr>
-      <th class="p-2 border">Airline</th>
-      <th class="p-2 border">Flight</th>
-      <th class="p-2 border">Departure</th>
-      <th class="p-2 border">Arrival</th>
-      <th class="p-2 border">Status</th>
-    </tr>
-  </thead>
-  <tbody id="resultsTable"></tbody>
-</table>
-
-<div id="loading" class="hidden text-center text-gray-600 mt-4">Checking flight status...</div>
-
-<script>
-const checkBtn = document.getElementById("checkBtn");
-const resultsTable = document.getElementById("resultsTable");
-const loading = document.getElementById("loading");
-
-checkBtn.addEventListener("click", async () => {
-  const airline = document.getElementById("airline").value;
-  const flight_number = document.getElementById("flight_number").value;
-  const departure = document.getElementById("departure").value;
-  const arrival = document.getElementById("arrival").value;
-
-  if (!airline || !flight_number || !departure || !arrival) {
-    alert("Please fill all fields.");
-    return;
-  }
-
-  loading.classList.remove("hidden");
-
-  const response = await fetch("/check_status", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ airline, flight_number, departure, arrival })
-  });
-  const result = await response.json();
-  loading.classList.add("hidden");
-
-  const row = `
-    <tr class="border hover:bg-gray-50 transition">
-      <td class="p-2 border">${result.airline}</td>
-      <td class="p-2 border">${result.flight}</td>
-      <td class="p-2 border">${result.departure}</td>
-      <td class="p-2 border">${result.arrival}</td>
-      <td class="p-2 border font-semibold ${
-        result.status.toLowerCase().includes('delayed') ? 'text-yellow-600' :
-        result.status.toLowerCase().includes('cancel') ? 'text-red-600' :
-        'text-green-600'
-      }">${result.status}</td>
-    </tr>`;
-  resultsTable.insertAdjacentHTML("beforeend", row);
-});
-</script>
 {% endblock %}
