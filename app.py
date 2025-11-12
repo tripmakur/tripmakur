@@ -1,16 +1,15 @@
 import os
 import pandas as pd
 import requests
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = "tripmakur-secret"
 
-API_KEY = os.getenv("API_KEY")  # AviationStack API key (set in Render)
+API_KEY = os.getenv("API_KEY")  # AviationStack API key set in Render
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {"xlsx"}
 
@@ -25,7 +24,11 @@ def home():
 
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
-    if request.method == "POST":
+    flight_info = None
+    uploaded_results = None
+
+    # Manual flight lookup
+    if request.method == "POST" and "airline" in request.form:
         airline = request.form.get("airline")
         flight_number = request.form.get("flight_number")
 
@@ -33,7 +36,6 @@ def flight_status():
         res = requests.get(url)
         data = res.json()
 
-        flight_info = None
         if "data" in data and data["data"]:
             f = data["data"][0]
             flight_info = {
@@ -43,10 +45,16 @@ def flight_status():
                 "arrival": f["arrival"]["airport"],
                 "status": f["flight_status"],
             }
+        else:
+            flight_info = {
+                "airline": airline,
+                "flight_number": flight_number,
+                "departure": "Unknown",
+                "arrival": "Unknown",
+                "status": "Not Found"
+            }
 
-        return render_template("flight_status.html", flight_info=flight_info)
-
-    return render_template("flight_status.html", flight_info=None)
+    return render_template("flight_status.html", flight_info=flight_info, uploaded_results=uploaded_results)
 
 
 @app.route("/upload", methods=["POST"])
@@ -72,34 +80,38 @@ def upload_file():
             flash(f"Error reading Excel file: {e}")
             return redirect(url_for("flight_status"))
 
-        # Ensure required columns exist
         required_cols = {"Airline", "FlightNumber", "From", "To"}
         if not required_cols.issubset(df.columns):
             flash("Excel file must have columns: Airline, FlightNumber, From, To")
             return redirect(url_for("flight_status"))
 
-        # Add Status column
-        statuses = []
+        # Fetch flight statuses
+        results = []
         for _, row in df.iterrows():
             airline = str(row["Airline"]).strip()
             flight_number = str(row["FlightNumber"]).strip()
+            departure = str(row["From"]).strip()
+            arrival = str(row["To"]).strip()
 
-            url = f"http://api.aviationstack.com/v1/flights?access_key={API_KEY}&airline_iata={airline}&flight_iata={flight_number}"
+            url = f"http://api.aviationstack.com/v1/flights?access_key={API_KEY}&airline_iata={airline}&flight_iata={flight_number}&dep_iata={departure}&arr_iata={arrival}"
             res = requests.get(url)
             data = res.json()
 
             if "data" in data and data["data"]:
                 f = data["data"][0]
-                statuses.append(f["flight_status"])
+                status = f["flight_status"]
             else:
-                statuses.append("Not Found")
+                status = "Not Found"
 
-        df["Status"] = statuses
+            results.append({
+                "Airline": airline,
+                "FlightNumber": flight_number,
+                "From": departure,
+                "To": arrival,
+                "Status": status
+            })
 
-        output_path = os.path.join(app.config["UPLOAD_FOLDER"], f"updated_{filename}")
-        df.to_excel(output_path, index=False)
-
-        return send_file(output_path, as_attachment=True)
+        return render_template("flight_status.html", flight_info=None, uploaded_results=results)
 
     flash("Invalid file type. Please upload an .xlsx file.")
     return redirect(url_for("flight_status"))
