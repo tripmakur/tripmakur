@@ -92,16 +92,23 @@ def upload_file():
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
     try:
+        # Read file and ensure first row is treated as headers
         if filename.endswith(".csv"):
-            df = pd.read_csv(file)
+            df = pd.read_csv(file, header=0)
         else:
-            df = pd.read_excel(file)
+            df = pd.read_excel(file, sheet_name=0, header=0)
+
+        # Drop completely empty rows
+        df = df.dropna(how="all")
+
+        # Drop any unnamed index columns (like 'Unnamed: 0')
+        df = df.loc[:, ~df.columns.str.contains('^unnamed', case=False)]
+
     except Exception as e:
         flash(f"Error reading file: {e}")
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
-    # Normalize columns
-    original_cols = list(df.columns)
+    # Normalize column names
     df.columns = [str(c).strip().lower().replace(" ", "").replace("_","") for c in df.columns]
 
     # Map flexible headers
@@ -129,7 +136,7 @@ def upload_file():
     required = {"Airline", "FlightNumber", "From", "To"}
     missing = required - set(normalized_df.columns)
     if missing:
-        flash(f"Missing required columns. Found columns: {', '.join(original_cols)}. Required: Airline, FlightNumber, From, To")
+        flash(f"Missing required columns. Found columns: {', '.join(df.columns)}. Required: Airline, FlightNumber, From, To")
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
     normalized_df = normalized_df.dropna(how="all")
@@ -156,6 +163,7 @@ def upload_file():
 
     last_results = results
     return render_template("flight_status.html", flight_info=None, uploaded_results=results)
+
 
 @app.route("/download", methods=["GET"])
 def download_excel():
