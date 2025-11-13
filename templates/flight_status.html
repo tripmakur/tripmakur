@@ -5,6 +5,7 @@
 
     <!-- Manual Flight Lookup -->
     <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded">
+        <input type="hidden" name="form_type" value="manual">
         <div class="mb-2">
             <label class="block font-semibold">Airline Code (e.g. DL):</label>
             <input type="text" name="airline" required class="border p-1 w-full">
@@ -13,32 +14,40 @@
             <label class="block font-semibold">Flight Number (e.g. 1234):</label>
             <input type="text" name="flight_number" required class="border p-1 w-full">
         </div>
+        <div class="mb-2">
+            <label class="block font-semibold">Departure Airport (IATA, e.g. ATL):</label>
+            <input type="text" name="departure" class="border p-1 w-full">
+        </div>
+        <div class="mb-2">
+            <label class="block font-semibold">Arrival Airport (IATA, e.g. LAX):</label>
+            <input type="text" name="arrival" class="border p-1 w-full">
+        </div>
         <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Check Status</button>
     </form>
 
     <!-- Excel Upload -->
     <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="card p-4 mb-6 border rounded">
-        <h3 class="font-bold mb-2">Upload Excel File</h3>
-        <p class="mb-2">Columns required: <strong>Airline, FlightNumber, From, To</strong></p>
-        <input type="file" name="file" accept=".xlsx" required class="mb-2">
+        <h3 class="font-bold mb-2">Upload Excel or CSV</h3>
+        <p class="mb-2">Accepts columns: <strong>Airline, FlightNumber, From, To</strong></p>
+        <input type="file" name="file" accept=".xlsx,.csv" required class="mb-2">
         <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">Upload & Check Flights</button>
     </form>
 
-    <!-- Manual Flight Result -->
+    <!-- Manual Result -->
     {% if flight_info %}
     <div class="card p-4 mb-6 border rounded bg-gray-50">
         <h3 class="font-bold mb-2">Manual Lookup Result</h3>
         <ul>
-            <li><strong>Airline:</strong> {{ flight_info.airline }}</li>
-            <li><strong>Flight Number:</strong> {{ flight_info.flight_number }}</li>
-            <li><strong>From:</strong> {{ flight_info.departure }}</li>
-            <li><strong>To:</strong> {{ flight_info.arrival }}</li>
-            <li><strong>Status:</strong> {{ flight_info.status }}</li>
+            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
+            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
+            <li><strong>From:</strong> {{ flight_info.From }}</li>
+            <li><strong>To:</strong> {{ flight_info.To }}</li>
+            <li><strong>Status:</strong> {{ flight_info.Status }}</li>
         </ul>
     </div>
     {% endif %}
 
-    <!-- Excel Upload Results -->
+    <!-- Upload Results -->
     {% if uploaded_results %}
     <div class="overflow-x-auto mb-4">
         <h3 class="font-bold mb-2">Flight Status Results</h3>
@@ -54,30 +63,18 @@
             </thead>
             <tbody>
                 {% for row in uploaded_results %}
-                <tr class="border hover:bg-gray-50 transition">
+                <tr class="border hover:bg-gray-50">
                     <td class="p-2 border">{{ row.Airline }}</td>
                     <td class="p-2 border">{{ row.FlightNumber }}</td>
                     <td class="p-2 border">{{ row.From }}</td>
                     <td class="p-2 border">{{ row.To }}</td>
-                    <td class="p-2 border font-semibold
-                        {% if 'delay' in row.Status|lower %}text-yellow-600
-                        {% elif 'cancel' in row.Status|lower %}text-red-600
-                        {% else %}text-green-600{% endif %}">
-                        {{ row.Status }}
-                    </td>
+                    <td class="p-2 border font-semibold">{{ row.Status }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-
-    <!-- Download Button -->
-    <div class="mb-4">
-        <a href="{{ url_for('download_excel') }}" class="bg-blue-500 text-white px-4 py-2 rounded">
-            Download as Excel
-        </a>
-    </div>
+    <a href="{{ url_for('download_excel') }}" class="bg-blue-500 text-white px-4 py-2 rounded">Download as Excel</a>
     {% endif %}
 </div>
 {% endblock %}
-
