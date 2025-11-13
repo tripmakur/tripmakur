@@ -1,8 +1,29 @@
-<form method="POST" action="{{ url_for('home') }}">
-    <label>Company Name:</label>
-    <input type="text" name="company" required>
-    <button type="submit">Go</button>
-</form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TripMakur - Home</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Welcome to TripMakur</h1>
+        <div class="card p-6 bg-white border rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">Enter Your Company Name</h2>
+            <form method="POST" action="{{ url_for('home') }}">
+                <div class="mb-4">
+                    <label class="block font-semibold mb-1">Company Name:</label>
+                    <input type="text" name="company" required class="border p-2 w-full rounded">
+                </div>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">
+                    Check Flight Status
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+
 
 
 
