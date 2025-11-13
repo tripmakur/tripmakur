@@ -5,6 +5,8 @@ from io import BytesIO
 import logging
 import requests
 from datetime import datetime
+import json
+import os
 
 # -----------------------
 # App setup
@@ -15,6 +17,19 @@ last_results = []
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+
+# -----------------------
+# Load allowed companies
+# -----------------------
+ALLOWED_COMPANIES_FILE = "allowed_companies.json"
+
+def load_allowed_companies():
+    if os.path.exists(ALLOWED_COMPANIES_FILE):
+        with open(ALLOWED_COMPANIES_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+ALLOWED_COMPANIES = load_allowed_companies()
 
 # -----------------------
 # AviationStack API helper
@@ -54,11 +69,16 @@ def flight_status():
     """
     global last_results
     if request.method == "POST":
+        company = request.form.get("company", "").strip()
         airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
         flight_date = request.form.get("flight_date", "").strip()
+
+        if company not in ALLOWED_COMPANIES:
+            flash(f"Access denied for company: {company}")
+            return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
         if not all([airline, flight_number, departure, arrival]):
             flash("All fields are required.")
@@ -88,6 +108,11 @@ def upload_file():
     Upload Excel or CSV with multiple flights
     """
     global last_results
+
+    company = request.form.get("company", "").strip()
+    if company not in ALLOWED_COMPANIES:
+        flash(f"Access denied for company: {company}")
+        return render_template("flight_status.html")
 
     if "file" not in request.files:
         flash("No file part in request.")
@@ -225,6 +250,7 @@ def download_excel():
 # -----------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
