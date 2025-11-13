@@ -51,11 +51,17 @@ def fetch_status(airline_code, flight_number, flight_date=None):
 def home():
     if request.method == "POST":
         company = request.form.get("company", "").strip()
+        if not company:
+            flash("Please enter a company name.")
+            return render_template("index.html")
+
         if company not in ALLOWED_COMPANIES:
             flash(f"Access denied for company: {company}")
             return render_template("index.html")
+
         # Redirect to flight-status page with company in query string
         return redirect(url_for("flight_status", company=company))
+
     return render_template("index.html")
 
 # -----------------------
@@ -67,18 +73,14 @@ def flight_status():
     flight_info = None
     uploaded_results = None
 
-    # Safely get company: from GET query on redirect, or POST form
-    if request.method == "GET":
-        company = request.args.get("company", "")
-    else:
-        company = request.form.get("company", "")
+    # Get company: from GET (redirect) or POST (manual/Excel)
+    company = request.args.get("company") if request.method == "GET" else request.form.get("company", "")
 
-    if company not in ALLOWED_COMPANIES:
-        flash(f"Access denied for company: {company}")
+    if not company or company not in ALLOWED_COMPANIES:
+        flash("Access denied or company missing.")
         return redirect(url_for("home"))
 
     if request.method == "POST" and request.form.get("form_type") == "manual":
-        # Manual flight lookup
         airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
         departure = request.form.get("departure", "").strip().upper()
@@ -102,100 +104,11 @@ def flight_status():
 
     return render_template(
         "flight_status.html",
+        company=company,
         flight_info=flight_info,
-        uploaded_results=uploaded_results,
-        company=company
+        uploaded_results=uploaded_results
     )
 
-# -----------------------
-# Excel upload
-# -----------------------
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    global last_results
-    company = request.form.get("company", "").strip()
-    if company not in ALLOWED_COMPANIES:
-        flash(f"Access denied for company: {company}")
-        return redirect(url_for("home"))
-
-    if "file" not in request.files:
-        flash("No file part in request.")
-        return redirect(url_for("flight_status", company=company))
-
-    file = request.files["file"]
-    if file.filename == "":
-        flash("No file selected.")
-        return redirect(url_for("flight_status", company=company))
-
-    try:
-        if file.filename.lower().endswith(".csv"):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file)
-
-        # Normalize columns
-        column_mapping = {
-            "airline": "Airline",
-            "flightnumber": "FlightNumber",
-            "from": "From",
-            "departure": "From",
-            "to": "To",
-            "arrival": "To",
-            "date": "Date"
-        }
-        normalized = {}
-        for col in df.columns:
-            col_lower = col.strip().lower()
-            if col_lower in column_mapping:
-                normalized[column_mapping[col_lower]] = df[col]
-
-        df = pd.DataFrame(normalized)
-        required = {"Airline", "FlightNumber", "From", "To"}
-        missing = required - set(df.columns)
-        if missing:
-            flash(f"Missing required columns: {', '.join(missing)}")
-            return redirect(url_for("flight_status", company=company))
-
-    except Exception as e:
-        flash(f"Error reading file: {e}")
-        return redirect(url_for("flight_status", company=company))
-
-    # Process flights
-    results = []
-    for _, row in df.iterrows():
-        airline = str(row["Airline"]).strip().upper()
-        flight_number = str(row["FlightNumber"]).strip()
-        departure = str(row["From"]).strip().upper()
-        arrival = str(row["To"]).strip().upper()
-        flight_date = str(row["Date"]).strip() if "Date" in row and row["Date"] else datetime.today().strftime("%Y-%m-%d")
-        status = fetch_status(airline, flight_number, flight_date)
-        results.append({
-            "Airline": airline,
-            "FlightNumber": flight_number,
-            "From": departure,
-            "To": arrival,
-            "Status": status
-        })
-
-    last_results = results
-    return render_template("flight_status.html", uploaded_results=results, flight_info=None, company=company)
-
-# -----------------------
-# Download results as Excel
-# -----------------------
-@app.route("/download-excel")
-def download_excel():
-    if not last_results:
-        flash("No results to download.")
-        return redirect(url_for("home"))
-
-    df = pd.DataFrame(last_results)
-    output = BytesIO()
-    df.to_excel(output, index=False, sheet_name="FlightStatus")
-    output.seek(0)
-    return send_file(output, as_attachment=True,
-                     download_name="flight_status_results.xlsx",
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 
