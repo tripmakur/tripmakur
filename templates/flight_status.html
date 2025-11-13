@@ -4,12 +4,17 @@
     <h1 class="text-2xl font-bold mb-6">Flight Status Checker</h1>
 
     <!-- Company Info -->
-    <div class="mb-4 p-4 border rounded bg-gray-50">
-        <p><strong>Company:</strong> {{ request.form.get('company','') }}</p>
-    </div>
+    <form method="POST" action="{{ url_for('flight_status') }}" class="mb-6">
+        <div class="mb-2">
+            <label class="block font-semibold">Company Name:</label>
+            <input type="text" name="company" value="{{ company }}" readonly
+                   class="border p-2 w-full rounded bg-gray-100">
+        </div>
+    </form>
 
     <!-- Manual Flight Lookup -->
     <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded bg-white shadow">
+        <input type="hidden" name="company" value="{{ company }}">
         <input type="hidden" name="form_type" value="manual">
 
         <div class="mb-2">
@@ -24,12 +29,12 @@
 
         <div class="mb-2">
             <label class="block font-semibold">Departure Airport (IATA, e.g. ATL):</label>
-            <input type="text" name="departure" class="border p-1 w-full">
+            <input type="text" name="departure" required class="border p-1 w-full">
         </div>
 
         <div class="mb-2">
             <label class="block font-semibold">Arrival Airport (IATA, e.g. LAX):</label>
-            <input type="text" name="arrival" class="border p-1 w-full">
+            <input type="text" name="arrival" required class="border p-1 w-full">
         </div>
 
         <div class="mb-2">
@@ -44,14 +49,12 @@
     </form>
 
     <!-- Excel/CSV Upload -->
-    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="card p-4 mb-6 border rounded bg-white shadow">
+    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data"
+          class="card p-4 mb-6 border rounded bg-white shadow">
         <h3 class="font-bold mb-2">Upload Excel or CSV</h3>
         <p class="mb-2">Accepts columns: <strong>Airline, FlightNumber, From, To, Date (optional)</strong></p>
 
-        <div class="mb-2">
-            <label class="block font-semibold">Company Name:</label>
-            <input type="text" name="company" required class="border p-1 w-full">
-        </div>
+        <input type="hidden" name="company" value="{{ company }}">
 
         <input type="file" name="file" accept=".xlsx,.csv" required class="mb-2">
         <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">
@@ -104,8 +107,8 @@
         Download as Excel
     </a>
     {% endif %}
-
 </div>
 {% endblock %}
+
 
 
