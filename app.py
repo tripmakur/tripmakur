@@ -126,45 +126,83 @@ def upload_file():
         import openpyxl
         import pandas as pd
 
-        file.seek(0)
-        workbook = openpyxl.load_workbook(file, data_only=True)
-        sheet = workbook.active
+        # Load Excel or CSV
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            file.seek(0)
+            workbook = openpyxl.load_workbook(file, data_only=True)
+            sheet = workbook.active
+            all_rows = list(sheet.iter_rows(values_only=True))
 
-        all_rows = list(sheet.iter_rows(values_only=True))
-        header_index = None
-        for i, row in enumerate(all_rows):
-            if any(cell not in (None, "", " ") for cell in row):
-                header_index = i
-                break
+            # Detect first non-empty row for header
+            header_index = None
+            for i, row in enumerate(all_rows):
+                if any(cell not in (None, "", " ") for cell in row):
+                    header_index = i
+                    break
+            if header_index is None:
+                flash("No header row found in Excel file.")
+                return render_template("flight_status.html")
 
-        if header_index is None:
-            flash("No header row found in Excel file.")
-            return render_template("flight_status.html")
+            headers = [str(h).strip() if h else "" for h in all_rows[header_index]]
+            data_rows = all_rows[header_index + 1:]
+            df = pd.DataFrame(data_rows, columns=headers)
 
-        headers = [str(h).strip() if h else "" for h in all_rows[header_index]]
-        data_rows = all_rows[header_index + 1:]
-        df = pd.DataFrame(data_rows, columns=headers)
-
+        # Clean df
         df = df.dropna(how="all")
         df = df.loc[:, ~df.columns.astype(str).str.match("Unnamed", case=False)]
 
-        df.columns = [str(c).strip().lower().replace(" ", "").replace("_", "") for c in df.columns]
+        # Normalize headers
+        normalized_columns = {}
+        column_mapping = {
+            "airline": "Airline",
+            "flightnumber": "FlightNumber",
+            "flightno": "FlightNumber",
+            "flight": "FlightNumber",
+            "from": "From",
+            "departure": "From",
+            "dep": "From",
+            "origin": "From",
+            "to": "To",
+            "arrival": "To",
+            "arr": "To",
+            "destination": "To",
+        }
 
-        required_cols = {"airline", "flightnumber", "from", "to"}
-        if not required_cols.issubset(df.columns):
-            flash(f"Missing required columns. Found: {', '.join(df.columns)}. Required: Airline, FlightNumber, From, To.")
+        for col in df.columns:
+            col_lower = col.strip().lower()
+            if col_lower in column_mapping:
+                normalized_columns[column_mapping[col_lower]] = df[col]
+
+        normalized_df = pd.DataFrame(normalized_columns)
+
+        # Log detected columns
+        logging.info(f"📄 Uploaded Excel detected columns: {list(normalized_df.columns)}")
+
+        # Check required columns
+        required = {"Airline", "FlightNumber", "From", "To"}
+        missing = required - set(normalized_df.columns)
+        if missing:
+            logging.error(f"❌ Missing columns: {missing}")
+            flash(f"Missing required columns. Found: {', '.join(normalized_df.columns)}. Required: Airline, FlightNumber, From, To")
             return render_template("flight_status.html")
 
     except Exception as e:
-        flash(f"Error reading Excel file: {e}")
+        logging.exception("❌ Error reading uploaded file")
+        flash(f"Error reading Excel/CSV file: {e}")
         return render_template("flight_status.html")
 
+    # Process flight data
     results = []
-    for _, row in df.iterrows():
-        airline = str(row["airline"]).strip().upper()
-        flight_number = str(row["flightnumber"]).strip()
-        departure = str(row["from"]).strip().upper()
-        arrival = str(row["to"]).strip().upper()
+    for _, row in normalized_df.iterrows():
+        airline = str(row["Airline"]).strip().upper()
+        flight_number = str(row["FlightNumber"]).strip()
+        departure = str(row["From"]).strip().upper()
+        arrival = str(row["To"]).strip().upper()
+
+        if not airline or not flight_number:
+            continue
 
         status = fetch_status(airline, flight_number, departure, arrival)
         results.append({
@@ -172,11 +210,12 @@ def upload_file():
             "FlightNumber": flight_number,
             "From": departure,
             "To": arrival,
-            "Status": status,
+            "Status": status
         })
 
     last_results = results
     return render_template("flight_status.html", uploaded_results=results, flight_info=None)
+
 
 
 
