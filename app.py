@@ -1,80 +1,108 @@
 import os
-import pandas as pd
+import logging
 import requests
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
-from io import BytesIO
+import pandas as pd
+from flask import Flask, render_template, request, send_file, flash, redirect, url_for
+from werkzeug.utils import secure_filename
+import io
 
+# --- App setup ---
 app = Flask(__name__)
-app.secret_key = "tripmakur-secret"
-
-# Read API key from environment
-API_KEY = os.environ.get("AVIATIONSTACK_API_KEY")
-
-# In-memory storage for last uploaded results
-last_results = []
-
+app.secret_key = "supersecretkey"
+app.config["UPLOAD_FOLDER"] = "uploads"
 ALLOWED_EXTENSIONS = {"xlsx", "csv"}
 
+# --- Logging setup ---
+logging.basicConfig(level=logging.INFO)
+
+# --- API key ---
+API_KEY = os.environ.get("AVIATIONSTACK_API_KEY")
+
+# --- Global storage for results ---
+last_results = []
+
+
+# --- Helper Functions ---
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 def fetch_status(airline, flight_number, departure, arrival):
+    """Fetch flight status from AviationStack API with error logging."""
     if not API_KEY:
+        logging.error("❌ AviationStack API key not configured in environment variables.")
         return "API key not configured"
-    
-    url = f"http://api.aviationstack.com/v1/flights"
+
+    url = "http://api.aviationstack.com/v1/flights"
     params = {
         "access_key": API_KEY,
         "airline_iata": airline,
         "flight_iata": f"{airline}{flight_number}",
         "dep_iata": departure,
-        "arr_iata": arrival
+        "arr_iata": arrival,
     }
 
     try:
-        import requests
-        response = requests.get(url, params=params)
+        logging.info(f"🔍 Checking flight: {airline}{flight_number} ({departure} → {arrival})")
+
+        response = requests.get(url, params=params, timeout=10)
         data = response.json()
+
+        if "error" in data:
+            msg = data["error"].get("message", "Unknown error")
+            logging.error(f"⚠️ API error: {msg}")
+            return f"API error: {msg}"
 
         if "data" in data and data["data"]:
             status = data["data"][0].get("flight_status", "Unknown")
+            logging.info(f"✅ Flight {airline}{flight_number} status: {status}")
             return status.capitalize()
         else:
+            logging.warning(f"🚫 Flight not found: {airline}{flight_number}")
             return "Not Found"
+
+    except requests.exceptions.RequestException as e:
+        logging.exception("🌐 Network error while fetching flight status")
+        return f"Network error: {e}"
+
     except Exception as e:
+        logging.exception("❗ Unexpected error in fetch_status()")
         return f"Error: {e}"
 
 
+# --- Routes ---
 @app.route("/")
 def home():
     return render_template("index.html")
 
+
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
-    flight_info = None
-    uploaded_results = last_results
+    if request.method == "POST":
+        airline = request.form.get("airline", "").strip().upper()
+        flight_number = request.form.get("flight_number", "").strip()
+        departure = request.form.get("departure", "").strip().upper()
+        arrival = request.form.get("arrival", "").strip().upper()
 
-    # Manual flight lookup (form has airline, flight_number, from, to)
-    if request.method == "POST" and request.form.get("form_type") == "manual":
-        airline = (request.form.get("airline") or "").strip().upper()
-        flight_number = (request.form.get("flight_number") or "").strip()
-        departure = (request.form.get("departure") or "").strip().upper()
-        arrival = (request.form.get("arrival") or "").strip().upper()
+        if not all([airline, flight_number, departure, arrival]):
+            flash("All fields are required.")
+            return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
-        if not airline or not flight_number:
-            flash("Please provide at least airline code and flight number for manual lookup.")
-        else:
-            status = fetch_status(airline, flight_number, departure, arrival)
-            flight_info = {
-                "Airline": airline,
-                "FlightNumber": f"{airline}{flight_number}",
-                "From": departure or "Unknown",
-                "To": arrival or "Unknown",
-                "Status": status
-            }
+        status = fetch_status(airline, flight_number, departure, arrival)
+        flight_info = {
+            "Airline": airline,
+            "FlightNumber": flight_number,
+            "From": departure,
+            "To": arrival,
+            "Status": status,
+        }
 
-    return render_template("flight_status.html", flight_info=flight_info, uploaded_results=uploaded_results)
+        last_results = [flight_info]
+        return render_template("flight_status.html", flight_info=flight_info, uploaded_results=None)
+
+    return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -82,32 +110,29 @@ def upload_file():
 
     if "file" not in request.files:
         flash("No file part in request.")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        return render_template("flight_status.html")
 
     file = request.files["file"]
-
     if file.filename == "":
         flash("No file selected.")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        return render_template("flight_status.html")
 
     filename = file.filename.lower()
     if not allowed_file(filename):
-        flash("Invalid file type. Please upload an .xlsx or .csv file.")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        flash("Invalid file type. Please upload .xlsx or .csv.")
+        return render_template("flight_status.html")
 
     try:
         import openpyxl
-        import io
 
         if filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
-            # Reset file pointer
             file.seek(0)
             workbook = openpyxl.load_workbook(file, data_only=True)
             sheet = workbook.active
 
-            # Find first non-empty row (header row)
+            # Detect first header row
             header_row = None
             for i, row in enumerate(sheet.iter_rows(values_only=True), start=1):
                 if any(cell not in (None, "", " ") for cell in row):
@@ -117,20 +142,15 @@ def upload_file():
             file.seek(0)
             df = pd.read_excel(file, sheet_name=0, header=header_row - 1 if header_row else 0)
 
-        # Drop empty rows
         df = df.dropna(how="all")
-
-        # Drop unnamed/index columns
-        df = df.loc[:, ~df.columns.str.contains('^unnamed', case=False)]
-
-        # Normalize column names
+        df = df.loc[:, ~df.columns.str.contains("^unnamed", case=False)]
         df.columns = [str(c).strip().lower().replace(" ", "").replace("_", "") for c in df.columns]
 
     except Exception as e:
         flash(f"Error reading Excel/CSV file: {e}")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        return render_template("flight_status.html")
 
-    # Flexible header mapping
+    # Column mapping
     column_map = {
         "airline": "Airline",
         "airlinecode": "Airline",
@@ -159,10 +179,8 @@ def upload_file():
     missing = required - set(normalized_df.columns)
     if missing:
         flash(f"Missing required columns. Found columns: {', '.join(df.columns)}. Required: Airline, FlightNumber, From, To")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        return render_template("flight_status.html")
 
-    # Clean up values
-    normalized_df = normalized_df.dropna(how="all")
     results = []
     for _, row in normalized_df.iterrows():
         airline = str(row.get("Airline", "")).strip().upper()
@@ -176,7 +194,7 @@ def upload_file():
         status = fetch_status(airline, flight_number, departure, arrival)
         results.append({
             "Airline": airline,
-            "FlightNumber": f"{airline}{flight_number}",
+            "FlightNumber": flight_number,
             "From": departure,
             "To": arrival,
             "Status": status
@@ -184,28 +202,32 @@ def upload_file():
 
     if not results:
         flash("No valid flight rows found in uploaded file.")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        return render_template("flight_status.html")
 
     last_results = results
-    return render_template("flight_status.html", flight_info=None, uploaded_results=results)
-
+    return render_template("flight_status.html", uploaded_results=results)
 
 
 @app.route("/download", methods=["GET"])
-def download_excel():
+def download_results():
     global last_results
     if not last_results:
-        flash("No flight data to download.")
-        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+        flash("No flight data available for download.")
+        return redirect(url_for("flight_status"))
 
     df = pd.DataFrame(last_results)
-    output = BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
-    return send_file(output, download_name="flight_statuses.xlsx", as_attachment=True, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="FlightStatus")
 
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="flight_status_results.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# --- Run app locally ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
 
 
 
