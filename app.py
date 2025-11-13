@@ -46,4 +46,4 @@ def home():
     return render_template("index.html")
 
 @app.route("/flight-status", methods=["GET", "POST"])
-d
+
