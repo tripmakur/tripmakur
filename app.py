@@ -93,10 +93,26 @@ def upload_file():
 
     try:
         # Read file and ensure first row is treated as headers
-        if filename.endswith(".csv"):
-            df = pd.read_csv(file, header=0)
-        else:
-            df = pd.read_excel(file, sheet_name=0, header=0)
+import io
+import openpyxl
+
+if filename.endswith(".csv"):
+    df = pd.read_csv(file)
+else:
+    # Load workbook directly so we can find the first non-empty header row
+    file.seek(0)
+    workbook = openpyxl.load_workbook(file, data_only=True)
+    sheet = workbook.active
+
+    header_row = None
+    for i, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+        if any(cell not in (None, "", " ") for cell in row):
+            header_row = i
+            break
+
+    file.seek(0)
+    df = pd.read_excel(file, sheet_name=0, header=header_row - 1 if header_row else 0)
+
 
         # Drop completely empty rows
         df = df.dropna(how="all")
