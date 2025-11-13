@@ -46,4 +46,133 @@ def home():
     return render_template("index.html")
 
 @app.route("/flight-status", methods=["GET", "POST"])
+def flight_status():
+    global last_results
+    flight_info = None
+    uploaded_results = last_results
+
+    # Manual flight lookup (form has airline, flight_number, from, to)
+    if request.method == "POST" and request.form.get("form_type") == "manual":
+        airline = (request.form.get("airline") or "").strip().upper()
+        flight_number = (request.form.get("flight_number") or "").strip()
+        departure = (request.form.get("departure") or "").strip().upper()
+        arrival = (request.form.get("arrival") or "").strip().upper()
+
+        if not airline or not flight_number:
+            flash("Please provide at least airline code and flight number for manual lookup.")
+        else:
+            status = fetch_status(airline, flight_number, departure, arrival)
+            flight_info = {
+                "Airline": airline,
+                "FlightNumber": f"{airline}{flight_number}",
+                "From": departure or "Unknown",
+                "To": arrival or "Unknown",
+                "Status": status
+            }
+
+    return render_template("flight_status.html", flight_info=flight_info, uploaded_results=uploaded_results)
+
+@app.route("/upload", methods=["POST"])
+def upload_file():
+    global last_results
+
+    if "file" not in request.files:
+        flash("No file part in request.")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        flash("No file selected.")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    filename = file.filename.lower()
+    if not allowed_file(filename):
+        flash("Invalid file type. Please upload an .xlsx or .csv file.")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+    except Exception as e:
+        flash(f"Error reading file: {e}")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    # Normalize columns
+    original_cols = list(df.columns)
+    df.columns = [str(c).strip().lower().replace(" ", "").replace("_","") for c in df.columns]
+
+    # Map flexible headers
+    column_map = {
+        "airline": "Airline",
+        "airlinecode": "Airline",
+        "flightnumber": "FlightNumber",
+        "flightno": "FlightNumber",
+        "flight": "FlightNumber",
+        "from": "From",
+        "departure": "From",
+        "dep": "From",
+        "to": "To",
+        "arrival": "To",
+        "arr": "To",
+    }
+
+    normalized_df = pd.DataFrame()
+    for key, target in column_map.items():
+        for col in df.columns:
+            if col.startswith(key):
+                normalized_df[target] = df[col]
+                break
+
+    required = {"Airline", "FlightNumber", "From", "To"}
+    missing = required - set(normalized_df.columns)
+    if missing:
+        flash(f"Missing required columns. Found columns: {', '.join(original_cols)}. Required: Airline, FlightNumber, From, To")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    normalized_df = normalized_df.dropna(how="all")
+    results = []
+    for _, row in normalized_df.iterrows():
+        airline = str(row.get("Airline","")).strip().upper()
+        flight_number = str(row.get("FlightNumber","")).strip()
+        departure = str(row.get("From","")).strip().upper()
+        arrival = str(row.get("To","")).strip().upper()
+        if not airline or not flight_number:
+            continue
+        status = fetch_status(airline, flight_number, departure, arrival)
+        results.append({
+            "Airline": airline,
+            "FlightNumber": f"{airline}{flight_number}",
+            "From": departure,
+            "To": arrival,
+            "Status": status
+        })
+
+    if not results:
+        flash("No valid flight rows found in uploaded file.")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    last_results = results
+    return render_template("flight_status.html", flight_info=None, uploaded_results=results)
+
+@app.route("/download", methods=["GET"])
+def download_excel():
+    global last_results
+    if not last_results:
+        flash("No flight data to download.")
+        return render_template("flight_status.html", flight_info=None, uploaded_results=None)
+
+    df = pd.DataFrame(last_results)
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+    return send_file(output, download_name="flight_statuses.xlsx", as_attachment=True, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+
+
 
