@@ -67,14 +67,17 @@ def flight_status():
     flight_info = None
     uploaded_results = None
 
-    # Get company from query (GET) or form (POST)
-    company = request.args.get("company", "") if request.method == "GET" else request.form.get("company", "")
+    # Safely get company: from GET query on redirect, or POST form
+    if request.method == "GET":
+        company = request.args.get("company", "")
+    else:
+        company = request.form.get("company", "")
 
     if company not in ALLOWED_COMPANIES:
         flash(f"Access denied for company: {company}")
         return redirect(url_for("home"))
 
-    if request.method == "POST":
+    if request.method == "POST" and request.form.get("form_type") == "manual":
         # Manual flight lookup
         airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
@@ -193,6 +196,7 @@ def download_excel():
     return send_file(output, as_attachment=True,
                      download_name="flight_status_results.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 
 
