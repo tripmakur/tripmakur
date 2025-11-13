@@ -125,6 +125,7 @@ def upload_file():
     try:
         import openpyxl
 
+        # Read file contents into pandas
         if filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
@@ -132,7 +133,7 @@ def upload_file():
             workbook = openpyxl.load_workbook(file, data_only=True)
             sheet = workbook.active
 
-            # Detect first header row
+            # Find first non-empty row (the header)
             header_row = None
             for i, row in enumerate(sheet.iter_rows(values_only=True), start=1):
                 if any(cell not in (None, "", " ") for cell in row):
@@ -140,13 +141,17 @@ def upload_file():
                     break
 
             file.seek(0)
-            df = pd.read_excel(file, sheet_name=0, header=header_row - 1 if header_row else 0)
+            df = pd.read_excel(file, header=header_row - 1 if header_row else 0)
 
+        # Clean up and normalize
         df = df.dropna(how="all")
         df = df.loc[:, ~df.columns.str.contains("^unnamed", case=False)]
         df.columns = [str(c).strip().lower().replace(" ", "").replace("_", "") for c in df.columns]
 
+        logging.info(f"📄 Uploaded Excel detected columns: {list(df.columns)}")
+
     except Exception as e:
+        logging.exception("❌ Error reading uploaded Excel/CSV")
         flash(f"Error reading Excel/CSV file: {e}")
         return render_template("flight_status.html")
 
@@ -178,7 +183,8 @@ def upload_file():
     required = {"Airline", "FlightNumber", "From", "To"}
     missing = required - set(normalized_df.columns)
     if missing:
-        flash(f"Missing required columns. Found columns: {', '.join(df.columns)}. Required: Airline, FlightNumber, From, To")
+        logging.error(f"❗ Missing columns: {missing}, detected columns: {list(df.columns)}")
+        flash(f"Missing required columns. Found columns: {', '.join(df.columns) or '(none)'} Required: Airline, FlightNumber, From, To")
         return render_template("flight_status.html")
 
     results = []
@@ -206,6 +212,7 @@ def upload_file():
 
     last_results = results
     return render_template("flight_status.html", uploaded_results=results)
+
 
 
 @app.route("/download", methods=["GET"])
