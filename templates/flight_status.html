@@ -4,25 +4,41 @@
     <h1 class="text-2xl font-bold mb-4">Flight Status Checker</h1>
 
     <!-- Manual Flight Lookup -->
-    <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded">
-        <input type="hidden" name="form_type" value="manual">
-        <div class="mb-2">
-            <label class="block font-semibold">Airline Code (e.g. DL):</label>
-            <input type="text" name="airline" required class="border p-1 w-full">
-        </div>
-        <div class="mb-2">
-            <label class="block font-semibold">Flight Number (e.g. 1234):</label>
-            <input type="text" name="flight_number" required class="border p-1 w-full">
-        </div>
-        <div class="mb-2">
-            <label class="block font-semibold">Departure Airport (IATA, e.g. ATL):</label>
-            <input type="text" name="departure" class="border p-1 w-full">
-        </div>
-        <div class="mb-2">
-            <label class="block font-semibold">Arrival Airport (IATA, e.g. LAX):</label>
-            <input type="text" name="arrival" class="border p-1 w-full">
-        </div>
-        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Check Status</button>
+<!-- Manual Flight Lookup -->
+<form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded">
+    <input type="hidden" name="form_type" value="manual">
+
+    <div class="mb-2">
+        <label class="block font-semibold">Airline Code (e.g. DL):</label>
+        <input type="text" name="airline" required class="border p-1 w-full">
+    </div>
+
+    <div class="mb-2">
+        <label class="block font-semibold">Flight Number (e.g. 1234):</label>
+        <input type="text" name="flight_number" required class="border p-1 w-full">
+    </div>
+
+    <div class="mb-2">
+        <label class="block font-semibold">Departure Airport (IATA, e.g. ATL):</label>
+        <input type="text" name="departure" class="border p-1 w-full">
+    </div>
+
+    <div class="mb-2">
+        <label class="block font-semibold">Arrival Airport (IATA, e.g. LAX):</label>
+        <input type="text" name="arrival" class="border p-1 w-full">
+    </div>
+
+    <div class="mb-2">
+        <label class="block font-semibold">Flight Date:</label>
+        <input type="date" name="flight_date" class="border p-1 w-full"
+               value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
+    </div>
+
+    <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">
+        Check Status
+    </button>
+</form>
+
     </form>
 
     <!-- Excel Upload -->
