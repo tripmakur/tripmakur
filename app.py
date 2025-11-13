@@ -92,54 +92,56 @@ def upload_file():
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
     try:
-        # Read file and ensure first row is treated as headers
-import io
-import openpyxl
+        import openpyxl
+        import io
 
-if filename.endswith(".csv"):
-    df = pd.read_csv(file)
-else:
-    # Load workbook directly so we can find the first non-empty header row
-    file.seek(0)
-    workbook = openpyxl.load_workbook(file, data_only=True)
-    sheet = workbook.active
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            # Reset file pointer
+            file.seek(0)
+            workbook = openpyxl.load_workbook(file, data_only=True)
+            sheet = workbook.active
 
-    header_row = None
-    for i, row in enumerate(sheet.iter_rows(values_only=True), start=1):
-        if any(cell not in (None, "", " ") for cell in row):
-            header_row = i
-            break
+            # Find first non-empty row (header row)
+            header_row = None
+            for i, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+                if any(cell not in (None, "", " ") for cell in row):
+                    header_row = i
+                    break
 
-    file.seek(0)
-    df = pd.read_excel(file, sheet_name=0, header=header_row - 1 if header_row else 0)
+            file.seek(0)
+            df = pd.read_excel(file, sheet_name=0, header=header_row - 1 if header_row else 0)
 
-
-        # Drop completely empty rows
+        # Drop empty rows
         df = df.dropna(how="all")
 
-        # Drop any unnamed index columns (like 'Unnamed: 0')
+        # Drop unnamed/index columns
         df = df.loc[:, ~df.columns.str.contains('^unnamed', case=False)]
 
+        # Normalize column names
+        df.columns = [str(c).strip().lower().replace(" ", "").replace("_", "") for c in df.columns]
+
     except Exception as e:
-        flash(f"Error reading file: {e}")
+        flash(f"Error reading Excel/CSV file: {e}")
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
-    # Normalize column names
-    df.columns = [str(c).strip().lower().replace(" ", "").replace("_","") for c in df.columns]
-
-    # Map flexible headers
+    # Flexible header mapping
     column_map = {
         "airline": "Airline",
         "airlinecode": "Airline",
+        "carrier": "Airline",
         "flightnumber": "FlightNumber",
         "flightno": "FlightNumber",
         "flight": "FlightNumber",
         "from": "From",
         "departure": "From",
         "dep": "From",
+        "origin": "From",
         "to": "To",
         "arrival": "To",
         "arr": "To",
+        "destination": "To",
     }
 
     normalized_df = pd.DataFrame()
@@ -155,15 +157,18 @@ else:
         flash(f"Missing required columns. Found columns: {', '.join(df.columns)}. Required: Airline, FlightNumber, From, To")
         return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
+    # Clean up values
     normalized_df = normalized_df.dropna(how="all")
     results = []
     for _, row in normalized_df.iterrows():
-        airline = str(row.get("Airline","")).strip().upper()
-        flight_number = str(row.get("FlightNumber","")).strip()
-        departure = str(row.get("From","")).strip().upper()
-        arrival = str(row.get("To","")).strip().upper()
+        airline = str(row.get("Airline", "")).strip().upper()
+        flight_number = str(row.get("FlightNumber", "")).strip()
+        departure = str(row.get("From", "")).strip().upper()
+        arrival = str(row.get("To", "")).strip().upper()
+
         if not airline or not flight_number:
             continue
+
         status = fetch_status(airline, flight_number, departure, arrival)
         results.append({
             "Airline": airline,
@@ -179,6 +184,7 @@ else:
 
     last_results = results
     return render_template("flight_status.html", flight_info=None, uploaded_results=results)
+
 
 
 @app.route("/download", methods=["GET"])
