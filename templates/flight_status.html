@@ -1,113 +1,62 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="container mx-auto p-4">
-    <h1 class="text-2xl font-bold mb-6">Flight Status Checker</h1>
+@app.route("/flight-status", methods=["GET", "POST"])
+def flight_status():
+    """
+    Manual flight lookup form with company permission check
+    """
+    global last_results
 
-    <!-- Manual Flight Lookup -->
-    <div class="mb-2">
-    <label class="block font-semibold">Company Name:</label>
-    <input type="text" name="company" required class="border p-1 w-full">
-</div>
+    # Default empty values for GET requests
+    flight_info = None
+    uploaded_results = None
 
-    <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded">
-        <input type="hidden" name="form_type" value="manual">
+    if request.method == "POST":
+        # Get form data
+        company = request.form.get("company", "").strip()
+        airline = request.form.get("airline", "").strip().upper()
+        flight_number = request.form.get("flight_number", "").strip()
+        departure = request.form.get("departure", "").strip().upper()
+        arrival = request.form.get("arrival", "").strip().upper()
+        flight_date = request.form.get("flight_date", "").strip()
 
-        <div class="mb-2">
-            <label class="block font-semibold">Airline Code (e.g. DL):</label>
-            <input type="text" name="airline" required class="border p-1 w-full">
-        </div>
+        # Check company permission
+        if company not in ALLOWED_COMPANIES:
+            flash(f"Access denied for company: {company}")
+            return render_template(
+                "flight_status.html",
+                flight_info=None,
+                uploaded_results=None
+            )
 
-        <div class="mb-2">
-            <label class="block font-semibold">Flight Number (e.g. 1234):</label>
-            <input type="text" name="flight_number" required class="border p-1 w-full">
-        </div>
+        # Check required fields
+        if not all([airline, flight_number, departure, arrival]):
+            flash("All fields are required.")
+            return render_template(
+                "flight_status.html",
+                flight_info=None,
+                uploaded_results=None
+            )
 
-        <div class="mb-2">
-            <label class="block font-semibold">Departure Airport (IATA, e.g. ATL):</label>
-            <input type="text" name="departure" class="border p-1 w-full">
-        </div>
+        # Default to today if no date provided
+        if not flight_date:
+            flight_date = datetime.today().strftime("%Y-%m-%d")
 
-        <div class="mb-2">
-            <label class="block font-semibold">Arrival Airport (IATA, e.g. LAX):</label>
-            <input type="text" name="arrival" class="border p-1 w-full">
-        </div>
+        # Fetch status
+        status = fetch_status(airline, flight_number, flight_date)
+        flight_info = {
+            "Airline": airline,
+            "FlightNumber": flight_number,
+            "From": departure,
+            "To": arrival,
+            "Status": status,
+        }
 
-        <div class="mb-2">
-            <label class="block font-semibold">Flight Date:</label>
-            <input type="date" name="flight_date" class="border p-1 w-full"
-                   value="{{ datetime.utcnow().strftime('%Y-%m-%d') }}">
-        </div>
+        # Save last result for download
+        last_results = [flight_info]
 
-        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">
-            Check Status
-        </button>
-    </form>
+    # Render template for both GET and POST
+    return render_template(
+        "flight_status.html",
+        flight_info=flight_info,
+        uploaded_results=uploaded_results
+    )
 
-    <!-- Excel/CSV Upload -->
-    <div class="mb-2">
-    <label class="block font-semibold">Company Name:</label>
-    <input type="text" name="company" required class="border p-1 w-full">
-</div>
-
-    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="card p-4 mb-6 border rounded">
-        <h3 class="font-bold mb-2">Upload Excel or CSV</h3>
-        <p class="mb-2">Accepts columns: <strong>Airline, FlightNumber, From, To, Date (optional)</strong></p>
-        <input type="file" name="file" accept=".xlsx,.csv" required class="mb-2">
-        <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">
-            Upload & Check Flights
-        </button>
-    </form>
-
-    <!-- Manual Lookup Result -->
-    {% if flight_info %}
-    <div class="card p-4 mb-6 border rounded bg-gray-50">
-        <h3 class="font-bold mb-2">Manual Lookup Result</h3>
-        <ul>
-            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
-            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
-            <li><strong>From:</strong> {{ flight_info.From }}</li>
-            <li><strong>To:</strong> {{ flight_info.To }}</li>
-            <li><strong>Status:</strong> {{ flight_info.Status }}</li>
-        </ul>
-    </div>
-    {% endif %}
-
-    <!-- Upload Results -->
-    {% if uploaded_results %}
-    <div class="overflow-x-auto mb-4">
-        <h3 class="font-bold mb-2">Flight Status Results</h3>
-        <table class="w-full border-collapse text-center">
-            <thead class="bg-blue-100">
-                <tr>
-                    <th class="p-2 border">Airline</th>
-                    <th class="p-2 border">Flight</th>
-                    <th class="p-2 border">From</th>
-                    <th class="p-2 border">To</th>
-                    <th class="p-2 border">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in uploaded_results %}
-                <tr class="border hover:bg-gray-50">
-                    <td class="p-2 border">{{ row.Airline }}</td>
-                    <td class="p-2 border">{{ row.FlightNumber }}</td>
-                    <td class="p-2 border">{{ row.From }}</td>
-                    <td class="p-2 border">{{ row.To }}</td>
-                    <td class="p-2 border font-semibold">{{ row.Status }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <a href="{{ url_for('download_excel') }}" class="bg-blue-500 text-white px-4 py-2 rounded">
-        Download as Excel
-    </a>
-    {% endif %}
-
-</div>
-{% endblock %}
-
-    <a href="{{ url_for('download_excel') }}" class="bg-blue-500 text-white px-4 py-2 rounded">Download as Excel</a>
-    {% endif %}
-</div>
-{% endblock %}
