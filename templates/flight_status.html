@@ -4,6 +4,11 @@
     <h1 class="text-2xl font-bold mb-6">Flight Status Checker</h1>
 
     <!-- Manual Flight Lookup -->
+    <div class="mb-2">
+    <label class="block font-semibold">Company Name:</label>
+    <input type="text" name="company" required class="border p-1 w-full">
+</div>
+
     <form method="POST" action="{{ url_for('flight_status') }}" class="card p-4 mb-6 border rounded">
         <input type="hidden" name="form_type" value="manual">
 
@@ -39,6 +44,11 @@
     </form>
 
     <!-- Excel/CSV Upload -->
+    <div class="mb-2">
+    <label class="block font-semibold">Company Name:</label>
+    <input type="text" name="company" required class="border p-1 w-full">
+</div>
+
     <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data" class="card p-4 mb-6 border rounded">
         <h3 class="font-bold mb-2">Upload Excel or CSV</h3>
         <p class="mb-2">Accepts columns: <strong>Airline, FlightNumber, From, To, Date (optional)</strong></p>
