@@ -4,6 +4,7 @@ import openpyxl
 from io import BytesIO
 import logging
 import requests
+from datetime import datetime
 
 # -----------------------
 # App setup
@@ -20,15 +21,17 @@ logging.basicConfig(level=logging.INFO)
 # -----------------------
 API_KEY = "YOUR_AVIATIONSTACK_API_KEY"
 
-def fetch_status(airline_code, flight_number, departure=None, arrival=None):
+def fetch_status(airline_code, flight_number, flight_date=None):
     """
     Fetch flight status from AviationStack API.
-    If departure/arrival are not provided, only uses IATA flight code.
+    Defaults to today if flight_date is None.
     """
     try:
+        if not flight_date:
+            flight_date = datetime.today().strftime("%Y-%m-%d")
         flight_iata = f"{airline_code}{flight_number}"
-        url = f"http://api.aviationstack.com/v1/flights?access_key={API_KEY}&flight_iata={flight_iata}"
-        response = requests.get(url)
+        params = {"access_key": API_KEY, "flight_iata": flight_iata, "flight_date": flight_date}
+        response = requests.get("http://api.aviationstack.com/v1/flights", params=params)
         data = response.json()
         if "data" not in data or not data["data"]:
             return "Not Found"
@@ -55,12 +58,17 @@ def flight_status():
         flight_number = request.form.get("flight_number", "").strip()
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
+        flight_date = request.form.get("flight_date", "").strip()
 
         if not all([airline, flight_number, departure, arrival]):
             flash("All fields are required.")
             return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
-        status = fetch_status(airline, flight_number, departure, arrival)
+        # Default to today if no date provided
+        if not flight_date:
+            flight_date = datetime.today().strftime("%Y-%m-%d")
+
+        status = fetch_status(airline, flight_number, flight_date)
         flight_info = {
             "Airline": airline,
             "FlightNumber": flight_number,
@@ -137,6 +145,7 @@ def upload_file():
             "arrival": "To",
             "arr": "To",
             "destination": "To",
+            "date": "Date"
         }
 
         normalized_columns = {}
@@ -146,7 +155,6 @@ def upload_file():
                 normalized_columns[column_mapping[col_lower]] = df[col]
 
         normalized_df = pd.DataFrame(normalized_columns)
-
         logging.info(f"📄 Uploaded Excel detected columns: {list(normalized_df.columns)}")
 
         # Check required columns
@@ -169,11 +177,16 @@ def upload_file():
         flight_number = str(row["FlightNumber"]).strip()
         departure = str(row["From"]).strip().upper()
         arrival = str(row["To"]).strip().upper()
+        flight_date = None
+        if "Date" in row and row["Date"]:
+            flight_date = str(row["Date"]).strip()
+        else:
+            flight_date = datetime.today().strftime("%Y-%m-%d")  # default to today
 
         if not airline or not flight_number:
             continue
 
-        status = fetch_status(airline, flight_number, departure, arrival)
+        status = fetch_status(airline, flight_number, flight_date)
         results.append({
             "Airline": airline,
             "FlightNumber": flight_number,
@@ -212,6 +225,7 @@ def download_excel():
 # -----------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
