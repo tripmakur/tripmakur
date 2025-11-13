@@ -1,83 +1,54 @@
-import os
+from flask import Flask, render_template, request, flash, redirect, url_for, send_file
+import pandas as pd
+import openpyxl
+from io import BytesIO
 import logging
 import requests
-import pandas as pd
-from flask import Flask, render_template, request, send_file, flash, redirect, url_for
-from werkzeug.utils import secure_filename
-import io
 
-# --- App setup ---
+# -----------------------
+# App setup
+# -----------------------
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
-app.config["UPLOAD_FOLDER"] = "uploads"
-ALLOWED_EXTENSIONS = {"xlsx", "csv"}
-
-# --- Logging setup ---
-logging.basicConfig(level=logging.INFO)
-
-# --- API key ---
-API_KEY = os.environ.get("AVIATIONSTACK_API_KEY")
-
-# --- Global storage for results ---
+app.secret_key = "your_secret_key"  # Replace with a secure key
 last_results = []
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
-# --- Helper Functions ---
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+# -----------------------
+# AviationStack API helper
+# -----------------------
+API_KEY = "YOUR_AVIATIONSTACK_API_KEY"
 
-
-def fetch_status(airline, flight_number, departure, arrival):
-    """Fetch flight status from AviationStack API with error logging."""
-    if not API_KEY:
-        logging.error("❌ AviationStack API key not configured in environment variables.")
-        return "API key not configured"
-
-    url = "http://api.aviationstack.com/v1/flights"
-    params = {
-        "access_key": API_KEY,
-        "airline_iata": airline,
-        "flight_iata": f"{airline}{flight_number}",
-        "dep_iata": departure,
-        "arr_iata": arrival,
-    }
-
+def fetch_status(airline_code, flight_number, departure=None, arrival=None):
+    """
+    Fetch flight status from AviationStack API.
+    If departure/arrival are not provided, only uses IATA flight code.
+    """
     try:
-        logging.info(f"🔍 Checking flight: {airline}{flight_number} ({departure} → {arrival})")
-
-        response = requests.get(url, params=params, timeout=10)
+        flight_iata = f"{airline_code}{flight_number}"
+        url = f"http://api.aviationstack.com/v1/flights?access_key={API_KEY}&flight_iata={flight_iata}"
+        response = requests.get(url)
         data = response.json()
-
-        if "error" in data:
-            msg = data["error"].get("message", "Unknown error")
-            logging.error(f"⚠️ API error: {msg}")
-            return f"API error: {msg}"
-
-        if "data" in data and data["data"]:
-            status = data["data"][0].get("flight_status", "Unknown")
-            logging.info(f"✅ Flight {airline}{flight_number} status: {status}")
-            return status.capitalize()
-        else:
-            logging.warning(f"🚫 Flight not found: {airline}{flight_number}")
+        if "data" not in data or not data["data"]:
             return "Not Found"
-
-    except requests.exceptions.RequestException as e:
-        logging.exception("🌐 Network error while fetching flight status")
-        return f"Network error: {e}"
-
+        flight = data["data"][0]
+        return flight.get("flight_status", "Not Found")
     except Exception as e:
-        logging.exception("❗ Unexpected error in fetch_status()")
         return f"Error: {e}"
 
-
-# --- Routes ---
+# -----------------------
+# Routes
+# -----------------------
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
+    """
+    Manual flight lookup form
+    """
     global last_results
     if request.method == "POST":
         airline = request.form.get("airline", "").strip().upper()
@@ -103,9 +74,11 @@ def flight_status():
 
     return render_template("flight_status.html", flight_info=None, uploaded_results=None)
 
-
 @app.route("/upload", methods=["POST"])
 def upload_file():
+    """
+    Upload Excel or CSV with multiple flights
+    """
     global last_results
 
     if "file" not in request.files:
@@ -123,9 +96,6 @@ def upload_file():
         return render_template("flight_status.html")
 
     try:
-        import openpyxl
-        import pandas as pd
-
         # Load Excel or CSV
         if filename.endswith(".csv"):
             df = pd.read_csv(file)
@@ -149,12 +119,11 @@ def upload_file():
             data_rows = all_rows[header_index + 1:]
             df = pd.DataFrame(data_rows, columns=headers)
 
-        # Clean df
+        # Drop fully empty rows and unnamed columns
         df = df.dropna(how="all")
         df = df.loc[:, ~df.columns.astype(str).str.match("Unnamed", case=False)]
 
-        # Normalize headers
-        normalized_columns = {}
+        # Map uploaded columns to internal names
         column_mapping = {
             "airline": "Airline",
             "flightnumber": "FlightNumber",
@@ -170,6 +139,7 @@ def upload_file():
             "destination": "To",
         }
 
+        normalized_columns = {}
         for col in df.columns:
             col_lower = col.strip().lower()
             if col_lower in column_mapping:
@@ -177,7 +147,6 @@ def upload_file():
 
         normalized_df = pd.DataFrame(normalized_columns)
 
-        # Log detected columns
         logging.info(f"📄 Uploaded Excel detected columns: {list(normalized_df.columns)}")
 
         # Check required columns
@@ -216,29 +185,34 @@ def upload_file():
     last_results = results
     return render_template("flight_status.html", uploaded_results=results, flight_info=None)
 
-
-
-
-
-@app.route("/download", methods=["GET"])
-def download_results():
-    global last_results
+@app.route("/download-excel")
+def download_excel():
+    """
+    Download last uploaded or manual flight results as Excel
+    """
     if not last_results:
-        flash("No flight data available for download.")
+        flash("No results available to download.")
         return redirect(url_for("flight_status"))
 
     df = pd.DataFrame(last_results)
-    output = io.BytesIO()
+    output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="FlightStatus")
-
     output.seek(0)
-    return send_file(output, as_attachment=True, download_name="flight_status_results.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="flight_status_results.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-# --- Run app locally ---
+# -----------------------
+# Run app
+# -----------------------
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)
+
 
 
 
