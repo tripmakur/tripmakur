@@ -17,6 +17,15 @@
   </nav>
 
   <main class="flex-grow max-w-6xl mx-auto mt-10 p-6 bg-white shadow rounded-xl">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+          {% for m in messages %}
+            <p class="text-yellow-700">{{ m }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
     {% block content %}{% endblock %}
   </main>
 
