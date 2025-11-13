@@ -1,11 +1,28 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="text-center">
-  <h1 class="text-4xl font-bold text-blue-700 mb-4">Welcome to TripMakur ✈️</h1>
-  <p class="text-lg mb-6">Your simple, real-time flight tracker.</p>
-  <a href="/flight-status" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition">
-    Check Flight Status
-  </a>
-</div>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TripMakur - Home</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Welcome to TripMakur</h1>
+
+        <div class="card p-6 bg-white border rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">Access Flight Status</h2>
+            <form method="POST" action="{{ url_for('flight_status') }}">
+                <div class="mb-4">
+                    <label class="block font-semibold mb-1">Company Name:</label>
+                    <input type="text" name="company" required class="border p-2 w-full rounded">
+                </div>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">
+                    Go to Flight Status
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+
 
