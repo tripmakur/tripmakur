@@ -23,9 +23,8 @@ def load_allowed_companies():
     if os.path.exists(ALLOWED_COMPANIES_FILE):
         try:
             with open(ALLOWED_COMPANIES_FILE, "r") as f:
-                companies = json.load(f)
-                return [c.strip().lower() for c in companies]
-        except Exception:
+                return [c.strip().lower() for c in json.load(f)]
+        except:
             return []
     return []
 
@@ -34,149 +33,184 @@ ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
 # ============================================================
-# FlightAPI.io Configuration
+# FlightAPI.io Config
 # ============================================================
 
-FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")  # must be set in Render
+FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")
 
 
-def parse_flightapi_response(data):
+# ============================================================
+# PARSER HELPERS
+# ============================================================
+
+def parse_airline_endpoint(data):
     """
-    FlightAPI.io returns a LIST like:
+    Parse the /airline endpoint:
     [
-      { "departure": {...} },
-      { "arrival": {...} },
-      { "aircraft": {...} },
-      { "status": "Scheduled" }
+      {"departure": {...}},
+      {"arrival": {...}},
+      {"aircraft": {...}},
+      {"status": "Departed"}
     ]
-
-    This helper extracts:
-    - status (string)
-    - departure info (dict)
-    - arrival info (dict)
     """
+    if not isinstance(data, list):
+        return None, {}, {}
 
     status = None
-    departure = {}
-    arrival = {}
-
-    if not isinstance(data, list):
-        return status, departure, arrival
+    dep = {}
+    arr = {}
 
     for item in data:
         if not isinstance(item, dict):
             continue
-
-        if "status" in item and isinstance(item["status"], str):
+        if "status" in item:
             status = item["status"]
+        if "departure" in item:
+            dep = item["departure"]
+        if "arrival" in item:
+            arr = item["arrival"]
 
-        if "departure" in item and isinstance(item["departure"], dict):
-            departure = item["departure"]
+    return status, dep, arr
 
-        if "arrival" in item and isinstance(item["arrival"], dict):
-            arrival = item["arrival"]
 
-    return status, departure, arrival
+def parse_flights_endpoint(data):
+    """
+    Parse the /flights endpoint:
+    {
+      "flights": [
+         { "displayStatus": "...", "departureTime": "...", ... }
+      ]
+    }
+    """
+    flights = data.get("flights", [])
+    if not flights:
+        return None, {}, {}
 
+    f = flights[0]  # first flight is the relevant one
+
+    status = f.get("displayStatus")
+
+    dep = {
+        "airport": f.get("departureAirportName"),
+        "scheduled": f.get("departureTime"),
+        "estimated": f.get("departureTime"),
+        "terminal_gate": None,
+    }
+
+    arr = {
+        "airport": f.get("arrivalAirportName"),
+        "scheduled": f.get("arrivalTime"),
+        "estimated": f.get("arrivalTime"),
+        "terminal_gate": None,
+    }
+
+    return status, dep, arr
+
+
+# ============================================================
+# FlightAPI.io Fetch with dual-endpoint fallback
+# ============================================================
 
 def fetch_status(airline, flight_number, flight_date):
     """
-    Fetch real flight status from FlightAPI.io using the /airline endpoint.
-
-    Example from FlightAPI.io docs:
-    curl -X GET "https://api.flightapi.io/airline/APIKEY?num=4906&name=aa&date=20251114"
+    1) Try /airline endpoint
+    2) If empty, fallback to /flights endpoint
     """
 
     if not FLIGHTAPI_KEY:
         return {
             "status": "API Key Missing",
             "departure": {},
-            "arrival": {},
+            "arrival": {}
         }
 
-    # Convert YYYY-MM-DD -> YYYYMMDD
     date_compact = flight_date.replace("-", "")
 
-    url = f"https://api.flightapi.io/airline/{FLIGHTAPI_KEY}"
-    params = {
-        "num": flight_number.strip(),
+    # --------------------------------------------------------
+    # TRY #1 — /airline endpoint
+    # --------------------------------------------------------
+    url1 = f"https://api.flightapi.io/airline/{FLIGHTAPI_KEY}"
+    params1 = {
         "name": airline.lower().strip(),
-        "date": date_compact,
+        "num": flight_number.strip(),
+        "date": date_compact
     }
 
     try:
-        response = requests.get(url, params=params, timeout=15)
+        r1 = requests.get(url1, params=params1, timeout=10)
 
-        # Basic HTTP error handling
-        if response.status_code != 200:
-            try:
-                msg = response.json().get("message", "")
-            except Exception:
-                msg = response.text
-            return {
-                "status": f"API Error {response.status_code}: {msg}",
-                "departure": {},
-                "arrival": {},
-            }
+        if r1.status_code == 200:
+            data = r1.json()
 
-        data = response.json()
-        status, dep_raw, arr_raw = parse_flightapi_response(data)
+            status, dep_raw, arr_raw = parse_airline_endpoint(data)
 
-        if not status:
-            status = "Not Found"
-        else:
-            status = status.capitalize()
+            if status:  # valid info
+                return {
+                    "status": status.capitalize(),
+                    "departure": {
+                        "airport": dep_raw.get("airport"),
+                        "scheduled": dep_raw.get("scheduledTime"),
+                        "estimated": dep_raw.get("estimatedTime"),
+                        "terminal_gate":
+                            f"{dep_raw.get('terminal','')} {dep_raw.get('gate','')}".strip()
+                            if dep_raw.get("terminal") or dep_raw.get("gate") else None
+                    },
+                    "arrival": {
+                        "airport": arr_raw.get("airport"),
+                        "scheduled": arr_raw.get("scheduledTime"),
+                        "estimated": arr_raw.get("estimatedTime"),
+                        "terminal_gate":
+                            f"{arr_raw.get('terminal','')} {arr_raw.get('gate','')}".strip()
+                            if arr_raw.get("terminal") or arr_raw.get("gate") else None
+                    }
+                }
+    except Exception:
+        pass
 
-        # Map departure/arrival info to simple fields expected by UI
-        dep_info = {
-            "airport": dep_raw.get("airport"),
-            "scheduled": dep_raw.get("scheduledTime"),
-            "estimated": dep_raw.get("estimatedTime"),
-            "terminal_gate": None,
-        }
-        if dep_raw.get("terminal") or dep_raw.get("gate"):
-            dep_info["terminal_gate"] = f"{dep_raw.get('terminal', '')} {dep_raw.get('gate', '')}".strip()
+    # --------------------------------------------------------
+    # TRY #2 — /flights endpoint (RELIABLE)
+    # --------------------------------------------------------
+    url2 = f"https://api.flightapi.io/flights/{FLIGHTAPI_KEY}"
+    params2 = {
+        "flight": f"{airline.upper()}{flight_number}",
+        "date": date_compact
+    }
 
-        arr_info = {
-            "airport": arr_raw.get("airport"),
-            "scheduled": arr_raw.get("scheduledTime"),
-            "estimated": arr_raw.get("estimatedTime"),
-            "terminal_gate": None,
-        }
-        if arr_raw.get("terminal") or arr_raw.get("gate"):
-            arr_info["terminal_gate"] = f"{arr_raw.get('terminal', '')} {arr_raw.get('gate', '')}".strip()
+    try:
+        r2 = requests.get(url2, params=params2, timeout=10)
 
-        return {
-            "status": status,
-            "departure": dep_info,
-            "arrival": arr_info,
-        }
+        if r2.status_code == 200:
+            data = r2.json()
+
+            status, dep_raw, arr_raw = parse_flights_endpoint(data)
+
+            if status:
+                return {
+                    "status": status,
+                    "departure": dep_raw,
+                    "arrival": arr_raw
+                }
 
     except Exception as e:
-        return {
-            "status": f"Error: {e}",
-            "departure": {},
-            "arrival": {},
-        }
+        return {"status": f"Error: {e}", "departure": {}, "arrival": {}}
+
+    return {"status": "Not Found", "departure": {}, "arrival": {}}
 
 
 # ============================================================
-# Home Page - Company Login
+# Home (company login)
 # ============================================================
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
         company = request.form.get("company", "").strip().lower()
 
-        if not company:
-            flash("Please enter a company name.")
-            return render_template("index.html")
+        if company in ALLOWED_COMPANIES:
+            return redirect(url_for("flight_status", company=company))
 
-        if company not in ALLOWED_COMPANIES:
-            flash("Access denied.")
-            return render_template("index.html")
-
-        return redirect(url_for("flight_status", company=company))
+        flash("Access denied.")
+        return render_template("index.html")
 
     return render_template("index.html")
 
@@ -184,6 +218,7 @@ def home():
 # ============================================================
 # Flight Status Page
 # ============================================================
+
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
@@ -208,15 +243,9 @@ def flight_status():
         arrival = request.form.get("arrival", "").strip().upper()
 
         if not all([airline, flight_number, departure, arrival]):
-            flash("All fields are required.")
-            return render_template(
-                "flight_status.html",
-                company=company,
-                flight_info=None,
-                uploaded_results=None,
-            )
+            flash("Please fill all fields.")
+            return render_template("flight_status.html", company=company)
 
-        # Always assume today's date
         flight_date = datetime.today().strftime("%Y-%m-%d")
 
         api_result = fetch_status(airline, flight_number, flight_date)
@@ -226,15 +255,15 @@ def flight_status():
             "FlightNumber": flight_number,
             "From": departure,
             "To": arrival,
-            "Status": api_result.get("status", "Unknown"),
-            "DepAirport": api_result.get("departure", {}).get("airport"),
-            "DepScheduled": api_result.get("departure", {}).get("scheduled"),
-            "DepEstimated": api_result.get("departure", {}).get("estimated"),
-            "DepTerminalGate": api_result.get("departure", {}).get("terminal_gate"),
-            "ArrAirport": api_result.get("arrival", {}).get("airport"),
-            "ArrScheduled": api_result.get("arrival", {}).get("scheduled"),
-            "ArrEstimated": api_result.get("arrival", {}).get("estimated"),
-            "ArrTerminalGate": api_result.get("arrival", {}).get("terminal_gate"),
+            "Status": api_result["status"],
+            "DepAirport": api_result["departure"].get("airport"),
+            "DepScheduled": api_result["departure"].get("scheduled"),
+            "DepEstimated": api_result["departure"].get("estimated"),
+            "DepTerminalGate": api_result["departure"].get("terminal_gate"),
+            "ArrAirport": api_result["arrival"].get("airport"),
+            "ArrScheduled": api_result["arrival"].get("scheduled"),
+            "ArrEstimated": api_result["arrival"].get("estimated"),
+            "ArrTerminalGate": api_result["arrival"].get("terminal_gate"),
         }
 
         last_results = [flight_info]
@@ -243,23 +272,19 @@ def flight_status():
         "flight_status.html",
         company=company,
         flight_info=flight_info,
-        uploaded_results=uploaded_results,
+        uploaded_results=uploaded_results
     )
 
 
 # ============================================================
-# Excel Upload
+# Spreadsheet Upload
 # ============================================================
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
 
-    company = (
-        request.args.get("company")
-        or request.form.get("company")
-        or ""
-    ).strip().lower()
-
+    company = request.args.get("company", "").strip().lower()
     if company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -269,25 +294,23 @@ def upload_file():
         return redirect(url_for("flight_status", company=company))
 
     file = request.files["file"]
-
     if file.filename == "":
         flash("No file selected.")
         return redirect(url_for("flight_status", company=company))
 
     try:
-        # Load CSV or Excel
-        if file.filename.lower().endswith(".csv"):
+        if file.filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
             df = pd.read_excel(file)
 
-        df.columns = df.columns.str.strip().str.lower()
+        df.columns = df.columns.str.lower().str.strip()
 
         required = ["airline", "flightnumber", "departure", "arrival"]
-        missing = [col for col in required if col not in df.columns]
+        missing = [c for c in required if c not in df.columns]
 
         if missing:
-            flash(f"Missing required columns: {missing}")
+            flash(f"Missing columns: {missing}")
             return redirect(url_for("flight_status", company=company))
 
         today = datetime.today().strftime("%Y-%m-%d")
@@ -295,26 +318,26 @@ def upload_file():
 
         for _, row in df.iterrows():
             airline = str(row["airline"]).strip().upper()
-            flight_number = str(row["flightnumber"]).strip()
-            departure = str(row["departure"]).strip().upper()
-            arrival = str(row["arrival"]).strip().upper()
+            fn = str(row["flightnumber"]).strip()
+            dep = str(row["departure"]).strip().upper()
+            arr = str(row["arrival"]).strip().upper()
 
-            api_result = fetch_status(airline, flight_number, today)
+            api_result = fetch_status(airline, fn, today)
 
             results.append({
                 "Airline": airline,
-                "FlightNumber": flight_number,
-                "From": departure,
-                "To": arrival,
-                "Status": api_result.get("status", "Unknown"),
-                "DepAirport": api_result.get("departure", {}).get("airport"),
-                "DepScheduled": api_result.get("departure", {}).get("scheduled"),
-                "DepEstimated": api_result.get("departure", {}).get("estimated"),
-                "DepTerminalGate": api_result.get("departure", {}).get("terminal_gate"),
-                "ArrAirport": api_result.get("arrival", {}).get("airport"),
-                "ArrScheduled": api_result.get("arrival", {}).get("scheduled"),
-                "ArrEstimated": api_result.get("arrival", {}).get("estimated"),
-                "ArrTerminalGate": api_result.get("arrival", {}).get("terminal_gate"),
+                "FlightNumber": fn,
+                "From": dep,
+                "To": arr,
+                "Status": api_result["status"],
+                "DepAirport": api_result["departure"].get("airport"),
+                "DepScheduled": api_result["departure"].get("scheduled"),
+                "DepEstimated": api_result["departure"].get("estimated"),
+                "DepTerminalGate": api_result["departure"].get("terminal_gate"),
+                "ArrAirport": api_result["arrival"].get("airport"),
+                "ArrScheduled": api_result["arrival"].get("scheduled"),
+                "ArrEstimated": api_result["arrival"].get("estimated"),
+                "ArrTerminalGate": api_result["arrival"].get("terminal_gate"),
             })
 
         last_results = results
@@ -323,21 +346,22 @@ def upload_file():
             "flight_status.html",
             company=company,
             flight_info=None,
-            uploaded_results=results,
+            uploaded_results=results
         )
 
     except Exception as e:
-        flash(f"Error processing file: {e}")
+        flash(f"Error reading file: {e}")
         return redirect(url_for("flight_status", company=company))
 
 
 # ============================================================
 # Download Excel
 # ============================================================
+
 @app.route("/download")
 def download_excel():
     if not last_results:
-        flash("No results to download.")
+        flash("No results available.")
         return redirect(url_for("home"))
 
     df = pd.DataFrame(last_results)
@@ -355,8 +379,10 @@ def download_excel():
 # ============================================================
 # Run App
 # ============================================================
+
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
