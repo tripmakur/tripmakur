@@ -1,35 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-3xl mx-auto px-4 py-10">
-    <div class="mb-8">
-        <h1 class="text-3xl font-semibold mb-2">Welcome to TripMakur</h1>
-        <p class="text-slate-300 text-sm max-w-xl">
-            Enter your company name to access the flight status dashboard.
-            Only approved companies are allowed to use this tool.
-        </p>
-    </div>
 
-    <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-6 shadow-lg">
-        <form method="POST" action="{{ url_for('home') }}" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium mb-1">Company Name</label>
-                <input
-                    type="text"
-                    name="company"
-                    class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter your company name"
-                    required
-                >
-            </div>
-            <button
-                type="submit"
-                class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-md transition"
-            >
-                Continue to Flight Status
-            </button>
-        </form>
-    </div>
+<div class="card">
+    <h2 class="card-title">Company Access</h2>
+    <p class="card-text">Enter your company name to access the flight status system.</p>
+
+    <form action="/" method="POST">
+        <label class="form-label">Company Name</label>
+        <input type="text" name="company" class="form-input" required>
+
+        <button type="submit" class="btn-primary">Continue</button>
+    </form>
 </div>
+
 {% endblock %}
 
 
