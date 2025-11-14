@@ -2,41 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>TripMakur Flight Status</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TripMakur - Flight Status</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
+<body class="bg-gray-100 text-gray-900">
 
-<body class="light-bg">
-
-    <!-- Top Navigation Bar -->
-    <nav class="navbar">
-        <div class="nav-content">
-            <div class="nav-logo">✈️ TripMakur</div>
-            <div class="nav-links">
-                <a href="{{ url_for('home') }}">Home</a>
-                <a href="{{ url_for('flight_status', company=request.args.get('company')) }}">Flight Status</a>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Page Content -->
-    <div class="container">
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="alert">
-                {% for msg in messages %}
-                    <p>{{ msg }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
+<nav class="bg-white shadow p-4 mb-6">
+    <div class="container mx-auto flex justify-between">
+        <h1 class="text-2xl font-bold text-blue-600">TripMakur</h1>
     </div>
+</nav>
+
+<div class="container mx-auto p-6">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
+            {% for msg in messages %}
+                <p>{{ msg }}</p>
+            {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</div>
 
 </body>
 </html>
+
 
 
 
