@@ -164,36 +164,59 @@ def flight_status():
 def upload_file():
     global last_results
 
+    # preserve company from hidden input
+    company = request.form.get("company", "").strip().lower()
+
+    if company and company not in ALLOWED_COMPANIES:
+        flash("Access denied.")
+        return redirect(url_for("home"))
+
     if "file" not in request.files:
         flash("No file uploaded.")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
     file = request.files["file"]
     if not file.filename:
         flash("No selected file.")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
     try:
-        # Read CSV or XLSX
-        df = pd.read_csv(file) if file.filename.endswith(".csv") else pd.read_excel(file)
+        # Read file safely
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
 
-        # Normalize columns
+        # Normalize column names
         df.columns = df.columns.str.strip().str.lower()
 
+        # REQUIRED columns
         required = ["airline", "flightnumber", "departure", "arrival"]
-        for col in required:
-            if col not in df.columns:
-                flash(f"Missing required column: {col}")
-                return redirect(url_for("flight_status"))
+        missing = [c for c in required if c not in df.columns]
+
+        if missing:
+            flash(f"Missing required columns: {missing}")
+            return redirect(url_for("flight_status", company=company))
 
         today = datetime.today().strftime("%Y-%m-%d")
         results = []
 
+        # Safe row iteration
         for _, row in df.iterrows():
-            airline = str(row["airline"]).strip().upper()
-            flight_number = str(row["flightnumber"]).strip()
-            departure = str(row["departure"]).strip().upper()
-            arrival = str(row["arrival"]).strip().upper()
+            airline = str(row.get("airline", "")).strip().upper()
+            flight_number = str(row.get("flightnumber", "")).strip()
+            departure = str(row.get("departure", "")).strip().upper()
+            arrival = str(row.get("arrival", "")).strip().upper()
+
+            if not airline or not flight_number:
+                results.append({
+                    "Airline": airline,
+                    "FlightNumber": flight_number,
+                    "From": departure,
+                    "To": arrival,
+                    "Status": "Missing Data"
+                })
+                continue
 
             status = fetch_status(airline, flight_number, today)
 
@@ -209,13 +232,15 @@ def upload_file():
 
         return render_template(
             "flight_status.html",
+            company=company,
             flight_info=None,
             uploaded_results=results
         )
 
     except Exception as e:
         flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
+
 
 
 # -----------------------
