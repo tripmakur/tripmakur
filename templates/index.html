@@ -1,20 +1,30 @@
 {% extends "base.html" %}
+
 {% block content %}
+<div class="container mt-5" style="max-width: 500px;">
+    <h2 class="text-center mb-4">Enter Company Name</h2>
 
-<div class="card">
-    <h2 style="margin-bottom: 15px;">Enter Company Name</h2>
-    <p style="margin-bottom: 10px; color: #555;">Only approved companies may access the dashboard.</p>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="alert alert-warning">
+                {% for msg in messages %}
+                    <div>{{ msg }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
 
-    <form action="{{ url_for('check_company') }}" method="POST">
-        <label>Company Name</label>
-        <input type="text" name="company" class="input" required>
+    <form action="{{ url_for('home') }}" method="POST">
+        <div class="form-group mb-3">
+            <label for="company">Company Name</label>
+            <input type="text" name="company" id="company" class="form-control" placeholder="Enter your company name" required>
+        </div>
 
-        <br><br>
-        <button type="submit" class="btn">Continue</button>
+        <button type="submit" class="btn btn-primary w-100">Check Flight Status</button>
     </form>
 </div>
-
 {% endblock %}
+
 
 
 
