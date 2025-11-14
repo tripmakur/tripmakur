@@ -1,116 +1,208 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div class="max-w-4xl mx-auto">
+<div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
 
-    <h2 class="text-3xl font-bold mb-6 text-gray-800">Flight Status Lookup</h2>
-
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="bg-yellow-100 border border-yellow-300 text-yellow-700 p-3 mb-4 rounded">
-                {% for msg in messages %}
-                    <p>{{ msg }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-
-    <!-- Manual Lookup -->
-    <div class="bg-white p-6 rounded-xl shadow mb-8">
-        <h3 class="text-xl font-bold mb-4 text-gray-700">Manual Lookup</h3>
-
-        <form method="POST" action="{{ url_for('flight_status') }}">
-            <input type="hidden" name="company" value="{{ company }}">
-
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="font-semibold">Airline</label>
-                    <input type="text" name="airline" class="border p-2 rounded w-full" required>
-                </div>
-                <div>
-                    <label class="font-semibold">Flight Number</label>
-                    <input type="text" name="flight_number" class="border p-2 rounded w-full" required>
-                </div>
-                <div>
-                    <label class="font-semibold">Departure (IATA)</label>
-                    <input type="text" name="departure" class="border p-2 rounded w-full" required>
-                </div>
-                <div>
-                    <label class="font-semibold">Arrival (IATA)</label>
-                    <input type="text" name="arrival" class="border p-2 rounded w-full" required>
-                </div>
-            </div>
-
-            <button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-                Check Status
-            </button>
-        </form>
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+            <h1 class="text-2xl font-semibold">Flight Status Dashboard</h1>
+            <p class="text-xs text-slate-400">
+                Company: <span class="font-semibold text-slate-200">{{ company }}</span>
+            </p>
+        </div>
     </div>
 
-    <!-- Upload Section -->
-    <div class="bg-white p-6 rounded-xl shadow mb-8">
-        <h3 class="text-xl font-bold mb-4 text-gray-700">Upload Excel / CSV</h3>
-        <form method="POST" enctype="multipart/form-data" action="{{ url_for('upload_file') }}">
-            <input type="file" name="file" accept=".csv,.xlsx" class="border p-2 rounded w-full mb-4" required>
+    <!-- Cards: Manual Lookup + Upload -->
+    <div class="grid md:grid-cols-2 gap-6">
+        <!-- Manual Flight Lookup -->
+        <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow">
+            <h2 class="text-lg font-semibold mb-3">Check Single Flight</h2>
+            <form method="POST" action="{{ url_for('flight_status', company=company) }}" class="space-y-3">
+                <input type="hidden" name="company" value="{{ company }}">
+                <div>
+                    <label class="block text-xs font-medium mb-1">Airline Code (e.g. AA)</label>
+                    <input
+                        type="text"
+                        name="airline"
+                        required
+                        class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1">Flight Number (e.g. 4906)</label>
+                    <input
+                        type="text"
+                        name="flight_number"
+                        required
+                        class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium mb-1">Departure Airport (IATA)</label>
+                        <input
+                            type="text"
+                            name="departure"
+                            required
+                            class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium mb-1">Arrival Airport (IATA)</label>
+                        <input
+                            type="text"
+                            name="arrival"
+                            required
+                            class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                        >
+                    </div>
+                </div>
+                <button
+                    type="submit"
+                    class="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2 rounded-md transition"
+                >
+                    Check Status
+                </button>
+            </form>
+        </div>
 
-            <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
-                Upload & Check Flights
-            </button>
-        </form>
+        <!-- Excel Upload -->
+        <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow">
+            <h2 class="text-lg font-semibold mb-2">Batch Check via Excel/CSV</h2>
+            <p class="text-xs text-slate-300 mb-3">
+                File must contain columns:
+                <span class="font-mono">Airline, FlightNumber, Departure, Arrival</span>
+            </p>
+            <form
+                method="POST"
+                action="{{ url_for('upload_file', company=company) }}"
+                enctype="multipart/form-data"
+                class="space-y-3"
+            >
+                <input type="hidden" name="company" value="{{ company }}">
+                <input
+                    type="file"
+                    name="file"
+                    accept=".xlsx,.csv"
+                    required
+                    class="w-full text-xs text-slate-200 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-500"
+                >
+                <button
+                    type="submit"
+                    class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-2 rounded-md transition"
+                >
+                    Upload & Check Flights
+                </button>
+            </form>
+        </div>
     </div>
 
-    <!-- Manual Result -->
+    <!-- Single Flight Result -->
     {% if flight_info %}
-    <div class="bg-white p-6 rounded-xl shadow mb-8">
-        <h3 class="text-xl font-bold mb-4 text-gray-700">Manual Lookup Result</h3>
-        <ul class="text-gray-700">
-            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
-            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
-            <li><strong>From:</strong> {{ flight_info.From }}</li>
-            <li><strong>To:</strong> {{ flight_info.To }}</li>
-            <li><strong>Status:</strong> {{ flight_info.Status }}</li>
-        </ul>
+    <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+                <h3 class="text-lg font-semibold">Result: {{ flight_info.Airline }} {{ flight_info.FlightNumber }}</h3>
+                <p class="text-xs text-slate-400">
+                    {{ flight_info.From }} → {{ flight_info.To }}
+                </p>
+            </div>
+            <div>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+                    {% if 'cancel' in flight_info.Status|lower %}
+                        bg-red-500/20 text-red-300 border border-red-500/40
+                    {% elif 'delay' in flight_info.Status|lower %}
+                        bg-amber-500/20 text-amber-200 border border-amber-500/40
+                    {% elif 'active' in flight_info.Status|lower or 'landed' in flight_info.Status|lower or 'scheduled' in flight_info.Status|lower %}
+                        bg-emerald-500/20 text-emerald-200 border border-emerald-500/40
+                    {% else %}
+                        bg-slate-600/30 text-slate-200 border border-slate-500/40
+                    {% endif %}
+                ">
+                    {{ flight_info.Status }}
+                </span>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-xs">
+            <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/80">
+                <h4 class="font-semibold mb-2">Departure</h4>
+                <p><span class="text-slate-400">Airport:</span> {{ flight_info.DepAirport or flight_info.From }}</p>
+                <p><span class="text-slate-400">Scheduled:</span> {{ flight_info.DepScheduled or '—' }}</p>
+                <p><span class="text-slate-400">Estimated:</span> {{ flight_info.DepEstimated or '—' }}</p>
+                <p><span class="text-slate-400">Terminal/Gate:</span> {{ flight_info.DepTerminalGate or '—' }}</p>
+            </div>
+            <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/80">
+                <h4 class="font-semibold mb-2">Arrival</h4>
+                <p><span class="text-slate-400">Airport:</span> {{ flight_info.ArrAirport or flight_info.To }}</p>
+                <p><span class="text-slate-400">Scheduled:</span> {{ flight_info.ArrScheduled or '—' }}</p>
+                <p><span class="text-slate-400">Estimated:</span> {{ flight_info.ArrEstimated or '—' }}</p>
+                <p><span class="text-slate-400">Terminal/Gate:</span> {{ flight_info.ArrTerminalGate or '—' }}</p>
+            </div>
+        </div>
     </div>
     {% endif %}
 
-    <!-- Uploaded Table -->
+    <!-- Uploaded Results Table -->
     {% if uploaded_results %}
-    <div class="bg-white p-6 rounded-xl shadow">
-        <h3 class="text-xl font-bold mb-4 text-gray-700">Uploaded Flight Status</h3>
-
-        <table class="w-full border text-center">
-            <thead class="bg-gray-200">
-                <tr>
-                    <th class="border p-2">Airline</th>
-                    <th class="border p-2">Flight</th>
-                    <th class="border p-2">From</th>
-                    <th class="border p-2">To</th>
-                    <th class="border p-2">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in uploaded_results %}
-                <tr class="hover:bg-gray-50">
-                    <td class="border p-2">{{ row.Airline }}</td>
-                    <td class="border p-2">{{ row.FlightNumber }}</td>
-                    <td class="border p-2">{{ row.From }}</td>
-                    <td class="border p-2">{{ row.To }}</td>
-                    <td class="border p-2 font-semibold">{{ row.Status }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <a href="{{ url_for('download_excel') }}"
-           class="mt-4 inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-            Download Results
-        </a>
+    <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow space-y-3">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">Batch Results</h3>
+            <a
+                href="{{ url_for('download_excel') }}"
+                class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-md"
+            >
+                Download as Excel
+            </a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-xs text-left border border-slate-700">
+                <thead class="bg-slate-900/80">
+                    <tr>
+                        <th class="px-2 py-2 border-b border-slate-700">Airline</th>
+                        <th class="px-2 py-2 border-b border-slate-700">Flight</th>
+                        <th class="px-2 py-2 border-b border-slate-700">From</th>
+                        <th class="px-2 py-2 border-b border-slate-700">To</th>
+                        <th class="px-2 py-2 border-b border-slate-700">Status</th>
+                        <th class="px-2 py-2 border-b border-slate-700">Dep Time</th>
+                        <th class="px-2 py-2 border-b border-slate-700">Arr Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in uploaded_results %}
+                    <tr class="border-b border-slate-800 hover:bg-slate-900/60">
+                        <td class="px-2 py-1">{{ row.Airline }}</td>
+                        <td class="px-2 py-1">{{ row.FlightNumber }}</td>
+                        <td class="px-2 py-1">{{ row.From }}</td>
+                        <td class="px-2 py-1">{{ row.To }}</td>
+                        <td class="px-2 py-1">
+                            <span class="inline-flex px-2 py-0.5 rounded-full
+                                {% if 'cancel' in row.Status|lower %}
+                                    bg-red-500/20 text-red-300
+                                {% elif 'delay' in row.Status|lower %}
+                                    bg-amber-500/20 text-amber-200
+                                {% elif 'active' in row.Status|lower or 'landed' in row.Status|lower or 'scheduled' in row.Status|lower %}
+                                    bg-emerald-500/20 text-emerald-200
+                                {% else %}
+                                    bg-slate-600/40 text-slate-200
+                                {% endif %}
+                            ">
+                                {{ row.Status }}
+                            </span>
+                        </td>
+                        <td class="px-2 py-1">{{ row.DepScheduled or row.DepEstimated or '—' }}</td>
+                        <td class="px-2 py-1">{{ row.ArrScheduled or row.ArrEstimated or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     {% endif %}
 
 </div>
 {% endblock %}
+
 
 
 
