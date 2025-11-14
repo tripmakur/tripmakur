@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>Enter Company Name</h2>
+<div class="card">
+    <h2 style="margin-bottom: 15px;">Enter Company Name</h2>
+    <p style="margin-bottom: 10px; color: #555;">Only approved companies may access the dashboard.</p>
 
-<form method="POST">
-    <label>Company Name:</label>
-    <input type="text" name="company" required>
+    <form action="{{ url_for('check_company') }}" method="POST">
+        <label>Company Name</label>
+        <input type="text" name="company" class="input" required>
 
-    <button type="submit">Check Flight Status</button>
-</form>
+        <br><br>
+        <button type="submit" class="btn">Continue</button>
+    </form>
+</div>
 
 {% endblock %}
+
 
 
 
