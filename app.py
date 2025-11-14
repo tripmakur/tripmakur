@@ -120,45 +120,61 @@ def flight_status():
 def upload_file():
     global last_results
 
-    company = (
-        request.args.get("company")
-        or request.form.get("company")
-        or ""
-    ).strip().lower()
-
-    if company not in ALLOWED_COMPANIES:
-        flash("Access denied.")
-        return redirect(url_for("home"))
+    if "file" not in request.files:
+        flash("No file uploaded")
+        return redirect(url_for("flight_status"))
 
     file = request.files["file"]
 
-    if not file:
-        flash("No file selected.")
-        return redirect(url_for("flight_status", company=company))
+    if file.filename == "":
+        flash("No selected file")
+        return redirect(url_for("flight_status"))
 
     try:
-        if file.filename.endswith(".csv"):
+        # Read Excel or CSV
+        filename = file.filename.lower()
+
+        if filename.endswith(".xlsx"):
+            df = pd.read_excel(file)
+        elif filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
-            df = pd.read_excel(file)
+            flash("Unsupported file format.")
+            return redirect(url_for("flight_status"))
 
-        df.columns = [c.strip().lower() for c in df.columns]
-        required = ["airline", "flightnumber", "from", "to"]
+        # Normalize column names (strip, lowercase)
+        df.columns = df.columns.str.strip().str.lower()
 
-        if not all(col in df.columns for col in required):
-            flash(f"Missing required columns.")
-            return redirect(url_for("flight_status", company=company))
+        # Expected normalized names
+        required = {"airline", "flightnumber", "from", "to"}
 
+        # Map alternate names
+        column_map = {
+            "departure": "from",
+            "arrival": "to",
+        }
+
+        # Apply mapping
+        df.rename(columns=column_map, inplace=True)
+
+        # After renaming, check for required columns
+        if not required.issubset(set(df.columns)):
+            flash(
+                f"Missing required columns. Found: {list(df.columns)} "
+                f"Required: Airline, FlightNumber, From, To"
+            )
+            return redirect(url_for("flight_status"))
+
+        # Process
         results = []
 
         for _, row in df.iterrows():
-            airline = str(row["airline"]).upper()
-            flight_number = str(row["flightnumber"])
-            departure = str(row["from"]).upper()
-            arrival = str(row["to"]).upper()
-            date = datetime.today().strftime("%Y-%m-%d")
+            airline = str(row["airline"]).strip().upper()
+            flight_number = str(row["flightnumber"]).strip()
+            departure = str(row["from"]).strip().upper()
+            arrival = str(row["to"]).strip().upper()
 
-            status = fetch_status(airline, flight_number, date)
+            status = fetch_status(airline, flight_number)
 
             results.append(
                 {
@@ -174,14 +190,14 @@ def upload_file():
 
         return render_template(
             "flight_status.html",
-            company=company,
-            uploaded_results=results,
             flight_info=None,
+            uploaded_results=results,
         )
 
     except Exception as e:
-        flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status", company=company))
+        flash(f"Error processing file: {str(e)}")
+        return redirect(url_for("flight_status"))
+
 
 
 # -------------------------
