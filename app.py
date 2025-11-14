@@ -1,90 +1,84 @@
 import os
 import json
 import requests
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
-from flask import (
-    Flask, render_template, request, redirect,
-    url_for, flash, send_file
-)
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key"
 
-# ======================================================
-# AviationStack API
-# ======================================================
-AVIATIONSTACK_API_KEY = "c60cdc6d78336192505479f9252862c5"
-
-
-def fetch_status(airline, flight_number, flight_date, dep=None, arr=None):
-    """
-    Returns today's status if available.
-    If not available, return the most recent known status.
-    This avoids 'Not Found' for airlines with limited real-time coverage.
-    """
-
-    base_url = "http://api.aviationstack.com/v1/flights"
-
-    params = {
-        "access_key": AVIATIONSTACK_API_KEY,
-        "airline_iata": airline,
-        "flight_number": flight_number
-    }
-
-    try:
-        response = requests.get(base_url, params=params)
-        data = response.json()
-
-        # API-level error
-        if "error" in data:
-            return f"API Error: {data['error'].get('message', 'Unknown error')}"
-
-        flights = data.get("data", [])
-        if not flights:
-            return "Not Found"
-
-        # Try to match today's date
-        for f in flights:
-            if f.get("flight_date") == flight_date:
-                return f.get("flight_status", "Unknown").title()
-
-        # No today match → use most recent flight
-        most_recent = flights[0]
-        status = most_recent.get("flight_status", "Unknown").title()
-        last_date = most_recent.get("flight_date", "")
-
-        return f"{status} (Last available: {last_date})"
-
-    except Exception as e:
-        return f"Error: {e}"
-
-
-# ======================================================
-# Load allowed companies
-# ======================================================
+# -------------------------
+# Load Allowed Companies
+# -------------------------
 ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
 
 def load_allowed_companies():
     if os.path.exists(ALLOWED_COMPANIES_FILE):
-        try:
-            with open(ALLOWED_COMPANIES_FILE, "r") as f:
-                companies = json.load(f)
-                return [c.strip().lower() for c in companies]
-        except:
-            return []
+        with open(ALLOWED_COMPANIES_FILE, "r") as f:
+            companies = json.load(f)
+            return [c.strip().lower() for c in companies]
     return []
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
+# -------------------------
+# API.market (AeroDataBox)
+# -------------------------
 
-# ======================================================
-# HOME PAGE — COMPANY LOGIN
-# ======================================================
+AERODATABOX_API_KEY = os.getenv("AERODATABOX_API_KEY")  # stored in Render
+
+
+def fetch_status(airline, flight_number, flight_date):
+    """Fetch flight status from AeroDataBox."""
+
+    base_url = (
+        f"https://api.aerodatabox.com/flights/number/"
+        f"{airline}{flight_number}/{flight_date}"
+    )
+
+    headers = {
+        "X-API-Key": AERODATABOX_API_KEY,
+        "Accept": "application/json",
+    }
+
+    try:
+        response = requests.get(base_url, headers=headers, timeout=10)
+
+        if response.status_code == 401:
+            return "API Authentication Error"
+
+        if response.status_code == 403:
+            return "API Access Forbidden"
+
+        if response.status_code == 429:
+            return "Rate Limit Exceeded"
+
+        if response.status_code != 200:
+            return f"API Error {response.status_code}"
+
+        data = response.json()
+
+        if "data" not in data or len(data["data"]) == 0:
+            return "Not Found"
+
+        # Select most recent flight record
+        flight = data["data"][0]
+
+        status = flight.get("flight_status", "Unknown").capitalize()
+        return status
+
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# -------------------------
+# HOME PAGE – Company Login
+# -------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
@@ -103,20 +97,20 @@ def home():
     return render_template("index.html")
 
 
-# ======================================================
-# FLIGHT STATUS DASHBOARD
-# ======================================================
+# -------------------------
+# Flight Status Page
+# -------------------------
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
 
     company = (
-        request.args.get("company") or
-        request.form.get("company") or
-        ""
+        request.args.get("company")
+        or request.form.get("company")
+        or ""
     ).strip().lower()
 
-    if not company or company not in ALLOWED_COMPANIES:
+    if company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
 
@@ -129,23 +123,18 @@ def flight_status():
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
 
-        # Today's date always
-        flight_date = datetime.today().strftime("%Y-%m-%d")
-
         if not all([airline, flight_number, departure, arrival]):
             flash("All fields are required.")
-            return render_template("flight_status.html",
-                                   company=company,
-                                   flight_info=None,
-                                   uploaded_results=None)
+            return render_template(
+                "flight_status.html",
+                company=company,
+                flight_info=None,
+                uploaded_results=None,
+            )
 
-        status = fetch_status(
-            airline,
-            flight_number,
-            flight_date,
-            departure,
-            arrival
-        )
+        flight_date = datetime.today().strftime("%Y-%m-%d")
+
+        status = fetch_status(airline, flight_number, flight_date)
 
         flight_info = {
             "Airline": airline,
@@ -157,47 +146,45 @@ def flight_status():
 
         last_results = [flight_info]
 
-    return render_template("flight_status.html",
-                           company=company,
-                           flight_info=flight_info,
-                           uploaded_results=uploaded_results)
+    return render_template(
+        "flight_status.html",
+        company=company,
+        flight_info=flight_info,
+        uploaded_results=uploaded_results,
+    )
 
 
-# ======================================================
-# UPLOAD EXCEL / CSV
-# ======================================================
+# -------------------------
+# Upload Excel
+# -------------------------
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
 
-    company = request.args.get("company") or request.form.get("company") or ""
-
     if "file" not in request.files:
         flash("No file uploaded.")
-        return redirect(url_for("flight_status", company=company))
+        return redirect(url_for("flight_status"))
 
     file = request.files["file"]
-
     if file.filename == "":
-        flash("No file selected.")
-        return redirect(url_for("flight_status", company=company))
+        flash("No selected file.")
+        return redirect(url_for("flight_status"))
 
     try:
-        # Read the file (Excel or CSV)
+        # Read file
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
             df = pd.read_excel(file)
 
-        # Normalize column names
-        df.columns = df.columns.str.strip().str.lower()
+        df.columns = df.columns.str.strip().lower()
 
         required = ["airline", "flightnumber", "departure", "arrival"]
         missing = [col for col in required if col not in df.columns]
 
         if missing:
             flash(f"Missing required columns: {missing}")
-            return redirect(url_for("flight_status", company=company))
+            return redirect(url_for("flight_status"))
 
         today = datetime.today().strftime("%Y-%m-%d")
         results = []
@@ -208,37 +195,30 @@ def upload_file():
             departure = str(row["departure"]).strip().upper()
             arrival = str(row["arrival"]).strip().upper()
 
-            status = fetch_status(
-                airline,
-                flight_number,
-                today,
-                departure,
-                arrival
-            )
+            status = fetch_status(airline, flight_number, today)
 
             results.append({
                 "Airline": airline,
                 "FlightNumber": flight_number,
                 "From": departure,
                 "To": arrival,
-                "Status": status
+                "Status": status,
             })
 
         last_results = results
 
         return render_template("flight_status.html",
-                               company=company,
                                flight_info=None,
                                uploaded_results=results)
 
     except Exception as e:
         flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status", company=company))
+        return redirect(url_for("flight_status"))
 
 
-# ======================================================
-# DOWNLOAD EXCEL RESULTS
-# ======================================================
+# -------------------------
+# Download Excel
+# -------------------------
 @app.route("/download")
 def download_excel():
     if not last_results:
@@ -253,30 +233,9 @@ def download_excel():
     return send_file(
         output,
         download_name="flight_status_results.xlsx",
-        as_attachment=True
+        as_attachment=True,
     )
 
 
-# ======================================================
-# RUN APP
-# ======================================================
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
