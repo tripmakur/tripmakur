@@ -164,13 +164,13 @@ def flight_status():
 def upload_file():
     global last_results
 
-    # Keep company authorization
+    # Preserve company
     company = request.form.get("company", "").strip().lower()
     if company and company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
 
-    # Validate file upload
+    # Validate upload
     if "file" not in request.files:
         flash("No file uploaded.")
         return redirect(url_for("flight_status", company=company))
@@ -181,15 +181,21 @@ def upload_file():
         return redirect(url_for("flight_status", company=company))
 
     try:
-        # Read the file
-        df = pd.read_csv(file) if file.filename.endswith(".csv") else pd.read_excel(file)
+        # ----- READ THE FILE CORRECTLY -----
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file, header=0)
+        else:
+            df = pd.read_excel(file, header=0)
 
-        # Normalize headers: remove spaces, tabs, weird characters
+        # Ensure header values are strings
+        df.columns = df.columns.astype(str)
+
+        # ----- NORMALIZE HEADERS -----
         df.columns = (
             df.columns
-            .str.strip()             # remove leading/trailing spaces
-            .str.replace(r'\s+', '', regex=True)  # remove all spaces
-            .str.replace(r'[^a-zA-Z]', '', regex=True)  # remove non-letters
+            .str.strip()
+            .str.replace(r"\s+", "", regex=True)
+            .str.replace(r"[^a-zA-Z]", "", regex=True)
             .str.lower()
         )
 
@@ -204,20 +210,18 @@ def upload_file():
         results = []
 
         for _, row in df.iterrows():
-            # safe extraction
             airline = str(row.get("airline", "")).strip().upper()
             flight_number = str(row.get("flightnumber", "")).strip()
             departure = str(row.get("departure", "")).strip().upper()
             arrival = str(row.get("arrival", "")).strip().upper()
 
-            # skip rows missing data
-            if airline == "" or flight_number == "":
+            if not airline or not flight_number:
                 results.append({
                     "Airline": airline,
                     "FlightNumber": flight_number,
                     "From": departure,
                     "To": arrival,
-                    "Status": "Missing Data",
+                    "Status": "Missing Data"
                 })
                 continue
 
@@ -228,7 +232,7 @@ def upload_file():
                 "FlightNumber": flight_number,
                 "From": departure,
                 "To": arrival,
-                "Status": status,
+                "Status": status
             })
 
         last_results = results
@@ -237,12 +241,13 @@ def upload_file():
             "flight_status.html",
             company=company,
             flight_info=None,
-            uploaded_results=results,
+            uploaded_results=results
         )
 
     except Exception as e:
         flash(f"Error processing file: {e}")
         return redirect(url_for("flight_status", company=company))
+
 
 
 
