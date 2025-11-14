@@ -1,35 +1,32 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>{{ title or "TripMakur" }}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <title>TripMakur Flight Status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
-  <nav class="bg-blue-700 text-white p-4">
-    <div class="max-w-6xl mx-auto flex justify-between items-center">
-      <a href="/" class="font-bold text-xl">TripMakur</a>
-      <div>
-        <a href="/" class="px-4 hover:underline">Home</a>
-        <a href="/flight-status" class="px-4 hover:underline">Flight Status</a>
-      </div>
-    </div>
-  </nav>
+<body>
 
-  <main class="flex-grow max-w-6xl mx-auto mt-10 p-6 bg-white shadow rounded-xl">
+<div class="nav">
+    <a href="{{ url_for('home') }}">Home</a>
+</div>
+
+<div class="container">
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-          {% for m in messages %}
-            <p class="text-yellow-700">{{ m }}</p>
-          {% endfor %}
+    {% if messages %}
+        <div class="flash">
+            {% for msg in messages %}
+                <p>{{ msg }}</p>
+            {% endfor %}
         </div>
-      {% endif %}
+    {% endif %}
     {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
 
-  <footer class="text-center mt-10 py-4 text-gray-500 border-t">
+    {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>
+
     <p>© 2025 TripMakur. All rights reserved.</p>
   </footer>
 </body>
