@@ -1,26 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>TripMakur - Home</title>
-</head>
-<body>
-<h1>Enter Company Name</h1>
-<form method="POST" action="{{ url_for('home') }}">
-    <input type="text" name="company" required placeholder="Company Name">
-    <button type="submit">Go to Flight Status</button>
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Enter Company Name</h2>
+
+<form method="POST">
+    <label>Company Name:</label>
+    <input type="text" name="company" required>
+
+    <button type="submit">Check Flight Status</button>
 </form>
-{% with messages = get_flashed_messages() %}
-    {% if messages %}
-        <ul>
-        {% for msg in messages %}
-            <li style="color:red">{{ msg }}</li>
-        {% endfor %}
-        </ul>
-    {% endif %}
-{% endwith %}
-</body>
-</html>
+
+{% endblock %}
+
 
 
 
