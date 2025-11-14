@@ -24,7 +24,7 @@ ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
 # -----------------------------------------
-# Airline name map (REQUIRED for FlightAPI.io)
+# Airline mapping required by FlightAPI.io
 # -----------------------------------------
 AIRLINE_NAME_MAP = {
     "AA": "aa",
@@ -35,29 +35,21 @@ AIRLINE_NAME_MAP = {
     "AS": "alaska",
     "NK": "spirit",
     "F9": "frontier",
-    "SY": "sun country",
-    "HA": "hawaiian",
-    "VX": "virgin america",
+    "SY": "suncountry",
+    "HA": "hawaiian"
 }
 
 # -----------------------------------------
-# FLIGHTAPI.IO KEY
+# FLIGHTAPI.IO API KEY (Render Environment Variable)
 # -----------------------------------------
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY", "69175603253bb1627f7ea9cc")
 
 
 # -----------------------------------------
-# FETCH STATUS FUNCTION (FlightAPI.io)
+# Fetch Flight Status
 # -----------------------------------------
 def fetch_status(airline, flight_number, flight_date):
-    """
-    Uses FlightAPI.io — correct airline name mapping added
-    """
-
-    # Convert airline code into the required FlightAPI.io "name" format
     airline_name = AIRLINE_NAME_MAP.get(airline.upper(), airline.lower())
-
-    # Convert 2025-11-14 --> 20251114
     date_str = flight_date.replace("-", "")
 
     url = (
@@ -71,7 +63,7 @@ def fetch_status(airline, flight_number, flight_date):
 
         # API returns actual flight results under "flights"
         if isinstance(data, dict) and "flights" in data and data["flights"]:
-            # Use the FIRST result returned
+            # use first valid flight
             flight = data["flights"][0]
 
             if "displayStatus" in flight:
@@ -86,7 +78,7 @@ def fetch_status(airline, flight_number, flight_date):
 
 
 # -----------------------------------------
-# HOME PAGE — company entry
+# HOME PAGE (Company login)
 # -----------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -98,7 +90,7 @@ def home():
             return render_template("index.html")
 
         if company not in ALLOWED_COMPANIES:
-            flash(f"Access denied for company: {company}")
+            flash("Access denied.")
             return render_template("index.html")
 
         return redirect(url_for("flight_status", company=company))
@@ -123,6 +115,7 @@ def flight_status():
     uploaded_results = None
 
     if request.method == "POST":
+
         airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
         departure = request.form.get("departure", "").strip().upper()
@@ -136,7 +129,6 @@ def flight_status():
                                    flight_info=None,
                                    uploaded_results=None)
 
-        # Default to today
         if not flight_date:
             flight_date = datetime.today().strftime("%Y-%m-%d")
 
@@ -165,22 +157,19 @@ def flight_status():
 def upload_file():
     global last_results
 
-    if "file" not in request.files:
-        flash("No file uploaded.")
-        return redirect(url_for("flight_status"))
-
-    file = request.files["file"]
-    if file.filename == "":
-        flash("No selected file.")
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        flash("No file selected.")
         return redirect(url_for("flight_status"))
 
     try:
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
-            df = pd.read_excel(file, sheet_name=0)
+            df = pd.read_excel(file)
 
-        df.columns = df.columns.str.strip().lower()
+        # Force all headers into consistent lowercase strings
+        df.columns = df.columns.map(lambda x: str(x).strip().lower())
 
         required = ["airline", "flightnumber", "departure", "arrival"]
         missing = [c for c in required if c not in df.columns]
@@ -211,6 +200,7 @@ def upload_file():
         last_results = results
 
         return render_template("flight_status.html",
+                               company=request.form.get("company"),
                                flight_info=None,
                                uploaded_results=results)
 
@@ -220,7 +210,7 @@ def upload_file():
 
 
 # -----------------------------------------
-# DOWNLOAD RESULTS
+# DOWNLOAD EXCEL
 # -----------------------------------------
 @app.route("/download")
 def download_excel():
@@ -234,7 +224,7 @@ def download_excel():
     output.seek(0)
 
     return send_file(output,
-                     download_name="flight_status_results.xlsx",
+                     download_name="flight_results.xlsx",
                      as_attachment=True)
 
 
