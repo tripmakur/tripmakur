@@ -120,14 +120,16 @@ def flight_status():
 def upload_file():
     global last_results
 
+    company = request.form.get("company") or request.args.get("company") or ""
+
     if "file" not in request.files:
         flash("No file uploaded.")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
     file = request.files["file"]
     if file.filename == "":
         flash("No selected file.")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
     try:
         # Read file (Excel or CSV)
@@ -144,7 +146,7 @@ def upload_file():
 
         if missing:
             flash(f"Missing required columns: {missing}")
-            return redirect(url_for("flight_status"))
+            return redirect(url_for("flight_status", company=company))
 
         today = datetime.today().strftime("%Y-%m-%d")
         results = []
@@ -168,12 +170,14 @@ def upload_file():
         last_results = results
 
         return render_template("flight_status.html",
+                               company=company,
                                flight_info=None,
                                uploaded_results=results)
 
     except Exception as e:
         flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
+
 
 
 
