@@ -1,86 +1,117 @@
 {% extends "base.html" %}
+
 {% block content %}
+<div class="max-w-4xl mx-auto">
 
-<div class="card">
-    <h2 style="margin-bottom: 15px;">Manual Flight Lookup</h2>
+    <h2 class="text-3xl font-bold mb-6 text-gray-800">Flight Status Lookup</h2>
 
-    <form method="POST" action="{{ url_for('flight_status') }}">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="bg-yellow-100 border border-yellow-300 text-yellow-700 p-3 mb-4 rounded">
+                {% for msg in messages %}
+                    <p>{{ msg }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
 
-        <label>Airline Code</label>
-        <input type="text" name="airline" class="input" required>
+    <!-- Manual Lookup -->
+    <div class="bg-white p-6 rounded-xl shadow mb-8">
+        <h3 class="text-xl font-bold mb-4 text-gray-700">Manual Lookup</h3>
 
-        <label>Flight Number</label>
-        <input type="text" name="flight_number" class="input" required>
+        <form method="POST" action="{{ url_for('flight_status') }}">
+            <input type="hidden" name="company" value="{{ company }}">
 
-        <label>Departure Airport (IATA)</label>
-        <input type="text" name="departure" class="input" required>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="font-semibold">Airline</label>
+                    <input type="text" name="airline" class="border p-2 rounded w-full" required>
+                </div>
+                <div>
+                    <label class="font-semibold">Flight Number</label>
+                    <input type="text" name="flight_number" class="border p-2 rounded w-full" required>
+                </div>
+                <div>
+                    <label class="font-semibold">Departure (IATA)</label>
+                    <input type="text" name="departure" class="border p-2 rounded w-full" required>
+                </div>
+                <div>
+                    <label class="font-semibold">Arrival (IATA)</label>
+                    <input type="text" name="arrival" class="border p-2 rounded w-full" required>
+                </div>
+            </div>
 
-        <label>Arrival Airport (IATA)</label>
-        <input type="text" name="arrival" class="input" required>
+            <button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                Check Status
+            </button>
+        </form>
+    </div>
 
-        <br>
-        <button type="submit" class="btn">Check Flight Status</button>
-    </form>
+    <!-- Upload Section -->
+    <div class="bg-white p-6 rounded-xl shadow mb-8">
+        <h3 class="text-xl font-bold mb-4 text-gray-700">Upload Excel / CSV</h3>
+        <form method="POST" enctype="multipart/form-data" action="{{ url_for('upload_file') }}">
+            <input type="file" name="file" accept=".csv,.xlsx" class="border p-2 rounded w-full mb-4" required>
+
+            <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                Upload & Check Flights
+            </button>
+        </form>
+    </div>
+
+    <!-- Manual Result -->
+    {% if flight_info %}
+    <div class="bg-white p-6 rounded-xl shadow mb-8">
+        <h3 class="text-xl font-bold mb-4 text-gray-700">Manual Lookup Result</h3>
+        <ul class="text-gray-700">
+            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
+            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
+            <li><strong>From:</strong> {{ flight_info.From }}</li>
+            <li><strong>To:</strong> {{ flight_info.To }}</li>
+            <li><strong>Status:</strong> {{ flight_info.Status }}</li>
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Uploaded Table -->
+    {% if uploaded_results %}
+    <div class="bg-white p-6 rounded-xl shadow">
+        <h3 class="text-xl font-bold mb-4 text-gray-700">Uploaded Flight Status</h3>
+
+        <table class="w-full border text-center">
+            <thead class="bg-gray-200">
+                <tr>
+                    <th class="border p-2">Airline</th>
+                    <th class="border p-2">Flight</th>
+                    <th class="border p-2">From</th>
+                    <th class="border p-2">To</th>
+                    <th class="border p-2">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in uploaded_results %}
+                <tr class="hover:bg-gray-50">
+                    <td class="border p-2">{{ row.Airline }}</td>
+                    <td class="border p-2">{{ row.FlightNumber }}</td>
+                    <td class="border p-2">{{ row.From }}</td>
+                    <td class="border p-2">{{ row.To }}</td>
+                    <td class="border p-2 font-semibold">{{ row.Status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="{{ url_for('download_excel') }}"
+           class="mt-4 inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+            Download Results
+        </a>
+    </div>
+    {% endif %}
+
 </div>
-
-{% if flight_info %}
-<div class="card">
-    <h3>Flight Result</h3>
-    <table>
-        <tr><th>Airline</th><td>{{ flight_info.Airline }}</td></tr>
-        <tr><th>Flight Number</th><td>{{ flight_info.FlightNumber }}</td></tr>
-        <tr><th>From</th><td>{{ flight_info.From }}</td></tr>
-        <tr><th>To</th><td>{{ flight_info.To }}</td></tr>
-        <tr><th>Status</th><td class="status">{{ flight_info.Status }}</td></tr>
-    </table>
-</div>
-{% endif %}
-
-<div class="card">
-    <h2 style="margin-bottom: 15px;">Upload Excel / CSV</h2>
-
-    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data">
-        <label>Choose File</label>
-        <input type="file" name="file" class="input" accept=".xlsx,.csv" required>
-
-        <br>
-        <button type="submit" class="btn">Upload & Check All Flights</button>
-    </form>
-</div>
-
-{% if uploaded_results %}
-<div class="card">
-    <h3>Uploaded Flight Results</h3>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Airline</th>
-                <th>Flight</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in uploaded_results %}
-            <tr>
-                <td>{{ row.Airline }}</td>
-                <td>{{ row.FlightNumber }}</td>
-                <td>{{ row.From }}</td>
-                <td>{{ row.To }}</td>
-                <td class="status">{{ row.Status }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <br>
-    <a href="{{ url_for('download_excel') }}" class="btn">Download Updated Excel</a>
-</div>
-{% endif %}
-
 {% endblock %}
+
 
 
 
