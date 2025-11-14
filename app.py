@@ -9,9 +9,9 @@ from io import BytesIO
 app = Flask(__name__)
 app.secret_key = "your-secret-key"
 
-# -----------------------------------------
+# ============================================================
 # Load allowed companies
-# -----------------------------------------
+# ============================================================
 ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
 def load_allowed_companies():
@@ -23,33 +23,23 @@ def load_allowed_companies():
 ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
-# -----------------------------------------
-# Airline mapping required by FlightAPI.io
-# -----------------------------------------
-AIRLINE_NAME_MAP = {
-    "AA": "aa",
-    "DL": "delta",
-    "UA": "ua",
-    "WN": "southwest",
-    "B6": "jetblue",
-    "AS": "alaska",
-    "NK": "spirit",
-    "F9": "frontier",
-    "SY": "suncountry",
-    "HA": "hawaiian"
-}
-
-# -----------------------------------------
-# FLIGHTAPI.IO KEY
-# -----------------------------------------
+# ============================================================
+# FLIGHTAPI.IO KEY (Render environment variable)
+# ============================================================
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY", "69175603253bb1627f7ea9cc")
 
 
-# -----------------------------------------
-# Fetch Flight Status — Corrected for /airline/ endpoint
-# -----------------------------------------
+# ============================================================
+# Fetch flight status — Correct for your API format
+# ============================================================
 def fetch_status(airline, flight_number, flight_date):
-    airline_name = AIRLINE_NAME_MAP.get(airline.upper(), airline.lower())
+    """
+    Correct parser for FlightAPI.io /airline/ endpoint:
+    https://api.flightapi.io/airline/{KEY}?num=2388&name=dl&date=20251114
+    """
+
+    # airline must be lowercase IATA code (aa, dl, ua…)
+    airline_name = airline.lower()
     date_str = flight_date.replace("-", "")
 
     url = (
@@ -58,18 +48,51 @@ def fetch_status(airline, flight_number, flight_date):
     )
 
     try:
-        resp = requests.get(url)
-        data = resp.json()
+        response = requests.get(url)
+        data = response.json()
 
-        # Must be a list (array) per FlightAPI.io format
-        if isinstance(data, list):
-            # Look for the object containing "status"
-            for item in data:
-                if isinstance(item, dict) and "status" in item:
-                    return item["status"]
+        # Expected format:
+        # { "flights": [ {...}, {...} ], "emptyResults": false }
+        if isinstance(data, dict) and "flights" in data and data["flights"]:
 
-            # If no status found
-            return "Status Not Available"
+            flights = data["flights"]
+
+            # Status priority
+            priority = {
+                "Cancelled": 5,
+                "Delayed": 4,
+                "Departed": 3,
+                "Arrived": 2,
+                "Scheduled": 1
+            }
+
+            best_status = None
+            best_score = 0
+
+            for f in flights:
+                status = f.get("displayStatus") or f.get("status")
+
+                if not status:
+                    continue
+
+                # Convert numeric status if needed
+                if isinstance(status, int):
+                    # Status mapping (based on FlightAPI.io)
+                    numeric_map = {
+                        1: "Scheduled",
+                        2: "Arrived",
+                        3: "Departed",
+                        4: "Delayed",
+                        5: "Cancelled"
+                    }
+                    status = numeric_map.get(status, None)
+
+                if status in priority:
+                    if priority[status] > best_score:
+                        best_score = priority[status]
+                        best_status = status
+
+            return best_status if best_status else "Unknown Status"
 
         return "Not Found"
 
@@ -77,9 +100,9 @@ def fetch_status(airline, flight_number, flight_date):
         return f"API Error: {e}"
 
 
-# -----------------------------------------
+# ============================================================
 # HOME PAGE — Company Login
-# -----------------------------------------
+# ============================================================
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
@@ -98,9 +121,9 @@ def home():
     return render_template("index.html")
 
 
-# -----------------------------------------
+# ============================================================
 # FLIGHT STATUS PAGE
-# -----------------------------------------
+# ============================================================
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
@@ -150,9 +173,9 @@ def flight_status():
                            uploaded_results=uploaded_results)
 
 
-# -----------------------------------------
+# ============================================================
 # EXCEL UPLOAD
-# -----------------------------------------
+# ============================================================
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
@@ -208,9 +231,9 @@ def upload_file():
         return redirect(url_for("flight_status"))
 
 
-# -----------------------------------------
+# ============================================================
 # DOWNLOAD EXCEL
-# -----------------------------------------
+# ============================================================
 @app.route("/download")
 def download_excel():
     if not last_results:
@@ -227,12 +250,7 @@ def download_excel():
                      as_attachment=True)
 
 
-# -----------------------------------------
+# ============================================================
 if __name__ == "__main__":
     app.run(debug=True)
 
-
-
-# -----------------------------------------
-if __name__ == "__main__":
-    app.run(debug=True)
