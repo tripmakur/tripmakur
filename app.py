@@ -40,13 +40,13 @@ AIRLINE_NAME_MAP = {
 }
 
 # -----------------------------------------
-# FLIGHTAPI.IO API KEY (Render Environment Variable)
+# FLIGHTAPI.IO KEY
 # -----------------------------------------
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY", "69175603253bb1627f7ea9cc")
 
 
 # -----------------------------------------
-# Fetch Flight Status
+# Fetch Flight Status — Corrected for /airline/ endpoint
 # -----------------------------------------
 def fetch_status(airline, flight_number, flight_date):
     airline_name = AIRLINE_NAME_MAP.get(airline.upper(), airline.lower())
@@ -61,15 +61,15 @@ def fetch_status(airline, flight_number, flight_date):
         resp = requests.get(url)
         data = resp.json()
 
-        # API returns actual flight results under "flights"
-        if isinstance(data, dict) and "flights" in data and data["flights"]:
-            # use first valid flight
-            flight = data["flights"][0]
+        # Must be a list (array) per FlightAPI.io format
+        if isinstance(data, list):
+            # Look for the object containing "status"
+            for item in data:
+                if isinstance(item, dict) and "status" in item:
+                    return item["status"]
 
-            if "displayStatus" in flight:
-                return flight["displayStatus"]
-
-            return "Unknown Status"
+            # If no status found
+            return "Status Not Available"
 
         return "Not Found"
 
@@ -78,7 +78,7 @@ def fetch_status(airline, flight_number, flight_date):
 
 
 # -----------------------------------------
-# HOME PAGE (Company login)
+# HOME PAGE — Company Login
 # -----------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -168,7 +168,6 @@ def upload_file():
         else:
             df = pd.read_excel(file)
 
-        # Force all headers into consistent lowercase strings
         df.columns = df.columns.map(lambda x: str(x).strip().lower())
 
         required = ["airline", "flightnumber", "departure", "arrival"]
@@ -226,6 +225,12 @@ def download_excel():
     return send_file(output,
                      download_name="flight_results.xlsx",
                      as_attachment=True)
+
+
+# -----------------------------------------
+if __name__ == "__main__":
+    app.run(debug=True)
+
 
 
 # -----------------------------------------
