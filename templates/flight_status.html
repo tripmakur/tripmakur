@@ -1,84 +1,87 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>Flight Status Checker</h2>
+<div class="card">
+    <h2 style="margin-bottom: 15px;">Manual Flight Lookup</h2>
 
-<h3>Company: {{ company }}</h3>
+    <form method="POST" action="{{ url_for('flight_status') }}">
 
-<!-- Manual Lookup -->
-<form method="POST">
-    <input type="hidden" name="company" value="{{ company }}">
+        <label>Airline Code</label>
+        <input type="text" name="airline" class="input" required>
 
-    <label>Airline Code:</label>
-    <input type="text" name="airline" required>
+        <label>Flight Number</label>
+        <input type="text" name="flight_number" class="input" required>
 
-    <label>Flight Number:</label>
-    <input type="text" name="flight_number" required>
+        <label>Departure Airport (IATA)</label>
+        <input type="text" name="departure" class="input" required>
 
-    <label>Departure Airport (From):</label>
-    <input type="text" name="departure" required>
+        <label>Arrival Airport (IATA)</label>
+        <input type="text" name="arrival" class="input" required>
 
-    <label>Arrival Airport (To):</label>
-    <input type="text" name="arrival" required>
-
-    <label>Date:</label>
-    <input type="date" name="flight_date">
-
-    <button type="submit">Check Status</button>
-</form>
+        <br>
+        <button type="submit" class="btn">Check Flight Status</button>
+    </form>
+</div>
 
 {% if flight_info %}
-<hr>
-<h3>Manual Flight Result:</h3>
-<ul>
-    <li>Airline: {{ flight_info.Airline }}</li>
-    <li>Flight: {{ flight_info.FlightNumber }}</li>
-    <li>From: {{ flight_info.From }}</li>
-    <li>To: {{ flight_info.To }}</li>
-    <li>Status: <strong>{{ flight_info.Status }}</strong></li>
-</ul>
+<div class="card">
+    <h3>Flight Result</h3>
+    <table>
+        <tr><th>Airline</th><td>{{ flight_info.Airline }}</td></tr>
+        <tr><th>Flight Number</th><td>{{ flight_info.FlightNumber }}</td></tr>
+        <tr><th>From</th><td>{{ flight_info.From }}</td></tr>
+        <tr><th>To</th><td>{{ flight_info.To }}</td></tr>
+        <tr><th>Status</th><td class="status">{{ flight_info.Status }}</td></tr>
+    </table>
+</div>
 {% endif %}
 
-<hr>
+<div class="card">
+    <h2 style="margin-bottom: 15px;">Upload Excel / CSV</h2>
 
-<!-- Excel Upload -->
-<form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data">
-    <input type="hidden" name="company" value="{{ company }}">
-    <label>Upload Excel/CSV:</label>
-    <input type="file" name="file" required>
-    <button type="submit">Upload & Check</button>
-</form>
+    <form method="POST" action="{{ url_for('upload_file') }}" enctype="multipart/form-data">
+        <label>Choose File</label>
+        <input type="file" name="file" class="input" accept=".xlsx,.csv" required>
+
+        <br>
+        <button type="submit" class="btn">Upload & Check All Flights</button>
+    </form>
+</div>
 
 {% if uploaded_results %}
-<hr>
-<h3>Uploaded Flight Results</h3>
+<div class="card">
+    <h3>Uploaded Flight Results</h3>
 
-<table border="1" cellpadding="5">
-    <tr>
-        <th>Airline</th>
-        <th>Flight</th>
-        <th>From</th>
-        <th>To</th>
-        <th>Status</th>
-    </tr>
+    <table>
+        <thead>
+            <tr>
+                <th>Airline</th>
+                <th>Flight</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in uploaded_results %}
+            <tr>
+                <td>{{ row.Airline }}</td>
+                <td>{{ row.FlightNumber }}</td>
+                <td>{{ row.From }}</td>
+                <td>{{ row.To }}</td>
+                <td class="status">{{ row.Status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-    {% for r in uploaded_results %}
-    <tr>
-        <td>{{ r.Airline }}</td>
-        <td>{{ r.FlightNumber }}</td>
-        <td>{{ r.From }}</td>
-        <td>{{ r.To }}</td>
-        <td>{{ r.Status }}</td>
-    </tr>
-    {% endfor %}
-</table>
-
-<br>
-<a href="{{ url_for('download_excel') }}">Download Excel</a>
-
+    <br>
+    <a href="{{ url_for('download_excel') }}" class="btn">Download Updated Excel</a>
+</div>
 {% endif %}
 
 {% endblock %}
+
 
 
 
