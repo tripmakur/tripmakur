@@ -1,207 +1,113 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
 
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div>
-            <h1 class="text-2xl font-semibold">Flight Status Dashboard</h1>
-            <p class="text-xs text-slate-400">
-                Company: <span class="font-semibold text-slate-200">{{ company }}</span>
-            </p>
-        </div>
-    </div>
+<h1 class="page-title">Flight Status Dashboard</h1>
 
-    <!-- Cards: Manual Lookup + Upload -->
-    <div class="grid md:grid-cols-2 gap-6">
-        <!-- Manual Flight Lookup -->
-        <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow">
-            <h2 class="text-lg font-semibold mb-3">Check Single Flight</h2>
-            <form method="POST" action="{{ url_for('flight_status', company=company) }}" class="space-y-3">
-                <input type="hidden" name="company" value="{{ company }}">
-                <div>
-                    <label class="block text-xs font-medium mb-1">Airline Code (e.g. AA)</label>
-                    <input
-                        type="text"
-                        name="airline"
-                        required
-                        class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                </div>
-                <div>
-                    <label class="block text-xs font-medium mb-1">Flight Number (e.g. 4906)</label>
-                    <input
-                        type="text"
-                        name="flight_number"
-                        required
-                        class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium mb-1">Departure Airport (IATA)</label>
-                        <input
-                            type="text"
-                            name="departure"
-                            required
-                            class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                        >
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium mb-1">Arrival Airport (IATA)</label>
-                        <input
-                            type="text"
-                            name="arrival"
-                            required
-                            class="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                        >
-                    </div>
-                </div>
-                <button
-                    type="submit"
-                    class="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2 rounded-md transition"
-                >
-                    Check Status
-                </button>
-            </form>
-        </div>
+<!-- Manual Flight Lookup -->
+<div class="card">
+    <h2 class="card-title">Check a Flight</h2>
 
-        <!-- Excel Upload -->
-        <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow">
-            <h2 class="text-lg font-semibold mb-2">Batch Check via Excel/CSV</h2>
-            <p class="text-xs text-slate-300 mb-3">
-                File must contain columns:
-                <span class="font-mono">Airline, FlightNumber, Departure, Arrival</span>
-            </p>
-            <form
-                method="POST"
-                action="{{ url_for('upload_file', company=company) }}"
-                enctype="multipart/form-data"
-                class="space-y-3"
-            >
-                <input type="hidden" name="company" value="{{ company }}">
-                <input
-                    type="file"
-                    name="file"
-                    accept=".xlsx,.csv"
-                    required
-                    class="w-full text-xs text-slate-200 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-500"
-                >
-                <button
-                    type="submit"
-                    class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-2 rounded-md transition"
-                >
-                    Upload & Check Flights
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Single Flight Result -->
-    {% if flight_info %}
-    <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow space-y-3">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+    <form method="POST" action="{{ url_for('flight_status', company=company) }}">
+        <div class="form-row">
             <div>
-                <h3 class="text-lg font-semibold">Result: {{ flight_info.Airline }} {{ flight_info.FlightNumber }}</h3>
-                <p class="text-xs text-slate-400">
-                    {{ flight_info.From }} → {{ flight_info.To }}
-                </p>
+                <label class="form-label">Airline Code (AA, DL, UA)</label>
+                <input type="text" name="airline" class="form-input" required>
             </div>
             <div>
-                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
-                    {% if 'cancel' in flight_info.Status|lower %}
-                        bg-red-500/20 text-red-300 border border-red-500/40
-                    {% elif 'delay' in flight_info.Status|lower %}
-                        bg-amber-500/20 text-amber-200 border border-amber-500/40
-                    {% elif 'active' in flight_info.Status|lower or 'landed' in flight_info.Status|lower or 'scheduled' in flight_info.Status|lower %}
-                        bg-emerald-500/20 text-emerald-200 border border-emerald-500/40
-                    {% else %}
-                        bg-slate-600/30 text-slate-200 border border-slate-500/40
-                    {% endif %}
-                ">
-                    {{ flight_info.Status }}
-                </span>
+                <label class="form-label">Flight Number</label>
+                <input type="text" name="flight_number" class="form-input" required>
             </div>
         </div>
 
-        <div class="grid md:grid-cols-2 gap-4 text-xs">
-            <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/80">
-                <h4 class="font-semibold mb-2">Departure</h4>
-                <p><span class="text-slate-400">Airport:</span> {{ flight_info.DepAirport or flight_info.From }}</p>
-                <p><span class="text-slate-400">Scheduled:</span> {{ flight_info.DepScheduled or '—' }}</p>
-                <p><span class="text-slate-400">Estimated:</span> {{ flight_info.DepEstimated or '—' }}</p>
-                <p><span class="text-slate-400">Terminal/Gate:</span> {{ flight_info.DepTerminalGate or '—' }}</p>
+        <div class="form-row">
+            <div>
+                <label class="form-label">Departure Airport</label>
+                <input type="text" name="departure" class="form-input" required>
             </div>
-            <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/80">
-                <h4 class="font-semibold mb-2">Arrival</h4>
-                <p><span class="text-slate-400">Airport:</span> {{ flight_info.ArrAirport or flight_info.To }}</p>
-                <p><span class="text-slate-400">Scheduled:</span> {{ flight_info.ArrScheduled or '—' }}</p>
-                <p><span class="text-slate-400">Estimated:</span> {{ flight_info.ArrEstimated or '—' }}</p>
-                <p><span class="text-slate-400">Terminal/Gate:</span> {{ flight_info.ArrTerminalGate or '—' }}</p>
+            <div>
+                <label class="form-label">Arrival Airport</label>
+                <input type="text" name="arrival" class="form-input" required>
             </div>
         </div>
-    </div>
-    {% endif %}
 
-    <!-- Uploaded Results Table -->
-    {% if uploaded_results %}
-    <div class="bg-slate-800/70 border border-slate-700 rounded-xl p-5 shadow space-y-3">
-        <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold">Batch Results</h3>
-            <a
-                href="{{ url_for('download_excel') }}"
-                class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-md"
-            >
-                Download as Excel
-            </a>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-xs text-left border border-slate-700">
-                <thead class="bg-slate-900/80">
-                    <tr>
-                        <th class="px-2 py-2 border-b border-slate-700">Airline</th>
-                        <th class="px-2 py-2 border-b border-slate-700">Flight</th>
-                        <th class="px-2 py-2 border-b border-slate-700">From</th>
-                        <th class="px-2 py-2 border-b border-slate-700">To</th>
-                        <th class="px-2 py-2 border-b border-slate-700">Status</th>
-                        <th class="px-2 py-2 border-b border-slate-700">Dep Time</th>
-                        <th class="px-2 py-2 border-b border-slate-700">Arr Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in uploaded_results %}
-                    <tr class="border-b border-slate-800 hover:bg-slate-900/60">
-                        <td class="px-2 py-1">{{ row.Airline }}</td>
-                        <td class="px-2 py-1">{{ row.FlightNumber }}</td>
-                        <td class="px-2 py-1">{{ row.From }}</td>
-                        <td class="px-2 py-1">{{ row.To }}</td>
-                        <td class="px-2 py-1">
-                            <span class="inline-flex px-2 py-0.5 rounded-full
-                                {% if 'cancel' in row.Status|lower %}
-                                    bg-red-500/20 text-red-300
-                                {% elif 'delay' in row.Status|lower %}
-                                    bg-amber-500/20 text-amber-200
-                                {% elif 'active' in row.Status|lower or 'landed' in row.Status|lower or 'scheduled' in row.Status|lower %}
-                                    bg-emerald-500/20 text-emerald-200
-                                {% else %}
-                                    bg-slate-600/40 text-slate-200
-                                {% endif %}
-                            ">
-                                {{ row.Status }}
-                            </span>
-                        </td>
-                        <td class="px-2 py-1">{{ row.DepScheduled or row.DepEstimated or '—' }}</td>
-                        <td class="px-2 py-1">{{ row.ArrScheduled or row.ArrEstimated or '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
+        <button type="submit" class="btn-primary">Check Status</button>
+    </form>
 </div>
+
+<!-- Manual Results -->
+{% if flight_info %}
+<div class="card">
+    <h2 class="card-title">Flight Details</h2>
+
+    <table class="results-table">
+        <tr><th>Airline</th><td>{{ flight_info.Airline }}</td></tr>
+        <tr><th>Flight Number</th><td>{{ flight_info.FlightNumber }}</td></tr>
+        <tr><th>From</th><td>{{ flight_info.From }}</td></tr>
+        <tr><th>To</th><td>{{ flight_info.To }}</td></tr>
+        <tr><th>Status</th><td><strong>{{ flight_info.Status }}</strong></td></tr>
+
+        <tr><th>Dep Airport</th><td>{{ flight_info.DepAirport }}</td></tr>
+        <tr><th>Scheduled Dep</th><td>{{ flight_info.DepScheduled }}</td></tr>
+        <tr><th>Estimated Dep</th><td>{{ flight_info.DepEstimated }}</td></tr>
+        <tr><th>Gate (Dep)</th><td>{{ flight_info.DepTerminalGate }}</td></tr>
+
+        <tr><th>Arr Airport</th><td>{{ flight_info.ArrAirport }}</td></tr>
+        <tr><th>Scheduled Arr</th><td>{{ flight_info.ArrScheduled }}</td></tr>
+        <tr><th>Estimated Arr</th><td>{{ flight_info.ArrEstimated }}</td></tr>
+        <tr><th>Gate (Arr)</th><td>{{ flight_info.ArrTerminalGate }}</td></tr>
+    </table>
+</div>
+{% endif %}
+
+<!-- Upload Excel -->
+<div class="card">
+    <h2 class="card-title">Upload Spreadsheet</h2>
+    <p class="card-text">Upload an Excel or CSV file containing flights to check.</p>
+
+    <form method="POST" action="{{ url_for('upload_file', company=company) }}" enctype="multipart/form-data">
+        <input type="file" name="file" class="form-input" required>
+        <button type="submit" class="btn-secondary">Upload & Check</button>
+    </form>
+</div>
+
+<!-- Upload Results Table -->
+{% if uploaded_results %}
+<div class="card">
+    <h2 class="card-title">Uploaded Flight Results</h2>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Airline</th>
+                <th>Flight</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Status</th>
+                <th>Dep Scheduled</th>
+                <th>Arr Scheduled</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in uploaded_results %}
+            <tr>
+                <td>{{ row.Airline }}</td>
+                <td>{{ row.FlightNumber }}</td>
+                <td>{{ row.From }}</td>
+                <td>{{ row.To }}</td>
+                <td>{{ row.Status }}</td>
+                <td>{{ row.DepScheduled }}</td>
+                <td>{{ row.ArrScheduled }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{{ url_for('download_excel') }}" class="btn-primary">Download Excel</a>
+</div>
+{% endif %}
+
 {% endblock %}
+
 
 
 
