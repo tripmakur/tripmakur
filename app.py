@@ -20,8 +20,9 @@ AVIATIONSTACK_API_KEY = "c60cdc6d78336192505479f9252862c5"
 
 def fetch_status(airline, flight_number, flight_date, dep=None, arr=None):
     """
-    Fetch real flight status from AviationStack using full filtering.
-    This dramatically improves match accuracy.
+    Returns today's status if available.
+    If not available, return the most recent known status.
+    This avoids 'Not Found' for airlines with limited real-time coverage.
     """
 
     base_url = "http://api.aviationstack.com/v1/flights"
@@ -29,37 +30,32 @@ def fetch_status(airline, flight_number, flight_date, dep=None, arr=None):
     params = {
         "access_key": AVIATIONSTACK_API_KEY,
         "airline_iata": airline,
-        "flight_number": flight_number,
-        "flight_date": flight_date,
+        "flight_number": flight_number
     }
-
-    if dep:
-        params["dep_iata"] = dep
-
-    if arr:
-        params["arr_iata"] = arr
 
     try:
         response = requests.get(base_url, params=params)
         data = response.json()
 
-        # API-level error (permissions, plan limits, etc.)
+        # API-level error
         if "error" in data:
             return f"API Error: {data['error'].get('message', 'Unknown error')}"
 
         flights = data.get("data", [])
-
         if not flights:
             return "Not Found"
 
-        # Take the first matching entry
-        flight = flights[0]
+        # Try to match today's date
+        for f in flights:
+            if f.get("flight_date") == flight_date:
+                return f.get("flight_status", "Unknown").title()
 
-        # Extract status
-        status = flight.get("flight_status", "Unknown")
+        # No today match → use most recent flight
+        most_recent = flights[0]
+        status = most_recent.get("flight_status", "Unknown").title()
+        last_date = most_recent.get("flight_date", "")
 
-        # Format: Active → Active, delayed → Delayed
-        return status.title()
+        return f"{status} (Last available: {last_date})"
 
     except Exception as e:
         return f"Error: {e}"
@@ -83,8 +79,6 @@ def load_allowed_companies():
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
-
-# Last results for Excel download
 last_results = []
 
 
@@ -117,9 +111,9 @@ def flight_status():
     global last_results
 
     company = (
-        request.args.get("company") 
-        or request.form.get("company") 
-        or ""
+        request.args.get("company") or
+        request.form.get("company") or
+        ""
     ).strip().lower()
 
     if not company or company not in ALLOWED_COMPANIES:
@@ -135,7 +129,7 @@ def flight_status():
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
 
-        # ALWAYS assume today's date
+        # Today's date always
         flight_date = datetime.today().strftime("%Y-%m-%d")
 
         if not all([airline, flight_number, departure, arrival]):
@@ -145,7 +139,13 @@ def flight_status():
                                    flight_info=None,
                                    uploaded_results=None)
 
-        status = fetch_status(airline, flight_number, flight_date, departure, arrival)
+        status = fetch_status(
+            airline,
+            flight_number,
+            flight_date,
+            departure,
+            arrival
+        )
 
         flight_info = {
             "Airline": airline,
