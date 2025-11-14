@@ -31,56 +31,48 @@ ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
 # ============================================================
-# AeroDataBox API.market
+# FlightAPI.io (Direct API)
 # ============================================================
 
-AERODATABOX_API_KEY = os.getenv("AERODATABOX_API_KEY")
+FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")  # stored in Render
 
 
 def fetch_status(airline, flight_number, flight_date):
     """
-    Fetch flight status from AeroDataBox.
-    Expects: airline (DL), flight_number (1497), date (YYYY-MM-DD)
+    Fetch flight status from FlightAPI.io.
     """
 
-    if not AERODATABOX_API_KEY:
+    if not FLIGHTAPI_KEY:
         return "API Key Missing"
 
-    url = (
-        f"https://api.aerodatabox.com/flights/number/"
-        f"{airline}{flight_number}/{flight_date}"
-    )
-
-    headers = {
-        "X-API-Key": AERODATABOX_API_KEY,
-        "Accept": "application/json"
+    url = "https://api.flightapi.io/flight"
+    params = {
+        "flight": f"{airline}{flight_number}",
+        "date": flight_date,
+        "apikey": FLIGHTAPI_KEY
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, params=params, timeout=10)
 
         if response.status_code == 401:
-            return "Unauthorized (check API key)"
+            return "Invalid API Key"
         if response.status_code == 403:
-            return "Access Forbidden (plan may not include flight lookup)"
+            return "Access Forbidden"
         if response.status_code == 404:
             return "Flight Not Found"
-        if response.status_code == 429:
-            return "Rate Limit Exceeded"
+        if response.status_code >= 500:
+            return "Server Error"
         if response.status_code != 200:
             return f"API Error {response.status_code}"
 
         data = response.json()
 
-        # AeroDataBox returns a "data" key
-        if "data" not in data or len(data["data"]) == 0:
+        # FlightAPI.io returns "status" at the top level or inside objects
+        status = data.get("status")
+
+        if not status:
             return "Not Found"
-
-        # Use first record (most relevant)
-        record = data["data"][0]
-
-        # Extract flight_status
-        status = record.get("flight_status", "Unknown")
 
         return status.capitalize()
 
@@ -143,9 +135,7 @@ def flight_status():
                                    flight_info=None,
                                    uploaded_results=None)
 
-        # Always assume today
         flight_date = datetime.today().strftime("%Y-%m-%d")
-
         status = fetch_status(airline, flight_number, flight_date)
 
         flight_info = {
@@ -253,4 +243,5 @@ def download_excel():
 # ============================================================
 if __name__ == "__main__":
     app.run(debug=True)
+
 
