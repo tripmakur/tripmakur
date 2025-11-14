@@ -12,67 +12,85 @@ from flask import (
 app = Flask(__name__)
 app.secret_key = "your-secret-key"
 
-# ============================
+# ======================================================
 # AviationStack API
-# ============================
+# ======================================================
 AVIATIONSTACK_API_KEY = "c60cdc6d78336192505479f9252862c5"
 
 
-def fetch_status(airline, flight_number, flight_date):
+def fetch_status(airline, flight_number, flight_date, dep=None, arr=None):
     """
-    Fetch real flight status using AviationStack API.
+    Fetch real flight status from AviationStack using full filtering.
+    This dramatically improves match accuracy.
     """
+
     base_url = "http://api.aviationstack.com/v1/flights"
 
     params = {
         "access_key": AVIATIONSTACK_API_KEY,
-        "flight_iata": f"{airline}{flight_number}",
-        "flight_date": flight_date
+        "airline_iata": airline,
+        "flight_number": flight_number,
+        "flight_date": flight_date,
     }
+
+    if dep:
+        params["dep_iata"] = dep
+
+    if arr:
+        params["arr_iata"] = arr
 
     try:
         response = requests.get(base_url, params=params)
         data = response.json()
 
-        # API error handling
+        # API-level error (permissions, plan limits, etc.)
         if "error" in data:
             return f"API Error: {data['error'].get('message', 'Unknown error')}"
 
         flights = data.get("data", [])
+
         if not flights:
             return "Not Found"
 
-        status = flights[0].get("flight_status", "Unknown").title()
-        return status
+        # Take the first matching entry
+        flight = flights[0]
+
+        # Extract status
+        status = flight.get("flight_status", "Unknown")
+
+        # Format: Active → Active, delayed → Delayed
+        return status.title()
 
     except Exception as e:
         return f"Error: {e}"
 
 
-# ============================
-# Allowed Company System
-# ============================
+# ======================================================
+# Load allowed companies
+# ======================================================
 ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
 
 def load_allowed_companies():
     if os.path.exists(ALLOWED_COMPANIES_FILE):
-        with open(ALLOWED_COMPANIES_FILE, "r") as f:
-            try:
+        try:
+            with open(ALLOWED_COMPANIES_FILE, "r") as f:
                 companies = json.load(f)
                 return [c.strip().lower() for c in companies]
-            except:
-                return []
+        except:
+            return []
     return []
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
+
+# Last results for Excel download
 last_results = []
 
 
-# ============================
-# HOME PAGE (Enter Company)
-# ============================
+# ======================================================
+# HOME PAGE — COMPANY LOGIN
+# ======================================================
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
@@ -86,22 +104,21 @@ def home():
             flash(f"Access denied for company: {company}")
             return render_template("index.html")
 
-        # Redirect to flight status dashboard
         return redirect(url_for("flight_status", company=company))
 
     return render_template("index.html")
 
 
-# ============================
-# FLIGHT STATUS PAGE
-# ============================
+# ======================================================
+# FLIGHT STATUS DASHBOARD
+# ======================================================
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
 
     company = (
-        request.args.get("company")
-        or request.form.get("company")
+        request.args.get("company") 
+        or request.form.get("company") 
         or ""
     ).strip().lower()
 
@@ -118,7 +135,7 @@ def flight_status():
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
 
-        # Assume today's date always
+        # ALWAYS assume today's date
         flight_date = datetime.today().strftime("%Y-%m-%d")
 
         if not all([airline, flight_number, departure, arrival]):
@@ -128,7 +145,7 @@ def flight_status():
                                    flight_info=None,
                                    uploaded_results=None)
 
-        status = fetch_status(airline, flight_number, flight_date)
+        status = fetch_status(airline, flight_number, flight_date, departure, arrival)
 
         flight_info = {
             "Airline": airline,
@@ -146,49 +163,58 @@ def flight_status():
                            uploaded_results=uploaded_results)
 
 
-# ============================
-# EXCEL UPLOAD HANDLER
-# ============================
+# ======================================================
+# UPLOAD EXCEL / CSV
+# ======================================================
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
 
+    company = request.args.get("company") or request.form.get("company") or ""
+
     if "file" not in request.files:
         flash("No file uploaded.")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
     file = request.files["file"]
+
     if file.filename == "":
-        flash("No selected file.")
-        return redirect(url_for("flight_status"))
+        flash("No file selected.")
+        return redirect(url_for("flight_status", company=company))
 
     try:
-        # Accept CSV or Excel
+        # Read the file (Excel or CSV)
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
-            df = pd.read_excel(file, sheet_name=0)
+            df = pd.read_excel(file)
 
         # Normalize column names
         df.columns = df.columns.str.strip().str.lower()
 
-        required_cols = ["airline", "flightnumber", "departure", "arrival"]
-        missing = [c for c in required_cols if c not in df.columns]
+        required = ["airline", "flightnumber", "departure", "arrival"]
+        missing = [col for col in required if col not in df.columns]
 
         if missing:
             flash(f"Missing required columns: {missing}")
-            return redirect(url_for("flight_status"))
+            return redirect(url_for("flight_status", company=company))
 
         today = datetime.today().strftime("%Y-%m-%d")
-
         results = []
+
         for _, row in df.iterrows():
             airline = str(row["airline"]).strip().upper()
             flight_number = str(row["flightnumber"]).strip()
             departure = str(row["departure"]).strip().upper()
             arrival = str(row["arrival"]).strip().upper()
 
-            status = fetch_status(airline, flight_number, today)
+            status = fetch_status(
+                airline,
+                flight_number,
+                today,
+                departure,
+                arrival
+            )
 
             results.append({
                 "Airline": airline,
@@ -200,21 +226,19 @@ def upload_file():
 
         last_results = results
 
-        return render_template(
-            "flight_status.html",
-            flight_info=None,
-            uploaded_results=results,
-            company=request.args.get("company", "")
-        )
+        return render_template("flight_status.html",
+                               company=company,
+                               flight_info=None,
+                               uploaded_results=results)
 
     except Exception as e:
         flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status"))
+        return redirect(url_for("flight_status", company=company))
 
 
-# ============================
-# DOWNLOAD RESULTS AS EXCEL
-# ============================
+# ======================================================
+# DOWNLOAD EXCEL RESULTS
+# ======================================================
 @app.route("/download")
 def download_excel():
     if not last_results:
@@ -233,11 +257,12 @@ def download_excel():
     )
 
 
-# ============================
+# ======================================================
 # RUN APP
-# ============================
+# ======================================================
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
