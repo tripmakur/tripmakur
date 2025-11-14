@@ -2,49 +2,63 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Flight Status Dashboard</title>
-
-    <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
-    <!-- Tailwind CSS -->
+    <title>TripMakur Flight Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Tailwind via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        .sidebar {
-            width: 260px;
-        }
-    </style>
 </head>
-
-<body class="bg-gray-100">
-
-    <div class="flex">
-
-        <!-- SIDEBAR -->
-        <aside class="sidebar bg-white h-screen shadow-md fixed">
-            <div class="p-6 border-b">
-                <h1 class="text-2xl font-bold text-blue-600">Flight Dashboard</h1>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="min-h-screen flex flex-col">
+        <!-- Top Nav -->
+        <nav class="bg-slate-950/80 border-b border-slate-800 backdrop-blur">
+            <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center text-white font-bold">
+                        TM
+                    </div>
+                    <div>
+                        <div class="font-semibold tracking-tight">TripMakur</div>
+                        <div class="text-xs text-slate-400">Flight Status Dashboard</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 text-sm">
+                    <a href="{{ url_for('home') }}" class="hover:text-blue-400 transition">Home</a>
+                    {% if request.endpoint == 'flight_status' %}
+                        <span class="text-xs text-slate-400 hidden sm:inline">
+                            Company: {{ company|default('N/A') }}
+                        </span>
+                    {% endif %}
+                </div>
             </div>
+        </nav>
 
-            <nav class="p-4">
-                <a href="{{ url_for('home') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Company Login</a>
-                <a href="{{ url_for('flight_status') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Flight Status</a>
-                <a href="{{ url_for('download_excel') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Download Results</a>
-            </nav>
-        </aside>
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="max-w-3xl mx-auto mt-4 px-4">
+            {% for msg in messages %}
+            <div class="mb-2 rounded border border-amber-400/40 bg-amber-950/40 text-amber-100 px-3 py-2 text-sm">
+                {{ msg }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
 
-        <!-- MAIN CONTENT -->
-        <main class="ml-[260px] p-8 w-full">
-            {% block content %}
-            {% endblock %}
+        <!-- Main content -->
+        <main class="flex-1">
+            {% block content %}{% endblock %}
         </main>
 
+        <footer class="border-t border-slate-800 mt-8">
+            <div class="max-w-6xl mx-auto px-4 py-3 text-xs text-slate-500 flex justify-between">
+                <span>© {{ 2025 }} TripMakur</span>
+                <span>Powered by FlightAPI.io</span>
+            </div>
+        </footer>
     </div>
 </body>
 </html>
+
 
 
