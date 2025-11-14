@@ -1,0 +1,160 @@
+/* Light Theme Base */
+body.light-bg {
+    background-color: #f5f7fa;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Navigation Bar */
+.navbar {
+    background: #ffffff;
+    padding: 14px 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+}
+
+.nav-content {
+    max-width: 1100px;
+    margin: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav-logo {
+    font-size: 22px;
+    font-weight: bold;
+    color: #005bbb;
+}
+
+.nav-links a {
+    margin-left: 18px;
+    color: #333;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.nav-links a:hover {
+    color: #0077cc;
+}
+
+/* Layout Container */
+.container {
+    max-width: 1100px;
+    margin: auto;
+    padding: 10px;
+}
+
+/* Card Style */
+.card {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.card-title {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 22px;
+    color: #005bbb;
+}
+
+.card-text {
+    margin-bottom: 15px;
+    color: #444;
+}
+
+/* Form Elements */
+.form-label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.form-input {
+    width: 100%;
+    padding: 9px;
+    margin-bottom: 15px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 15px;
+}
+
+/* Form Row */
+.form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.form-row > div {
+    flex: 1;
+}
+
+/* Buttons */
+.btn-primary {
+    background: #0077cc;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    font-size: 15px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background: #005fa3;
+}
+
+.btn-secondary {
+    background: #00a86b;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    font-size: 15px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: #008f5a;
+}
+
+/* Tables */
+.results-table,
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.results-table th,
+.data-table th {
+    background: #e9f2fa;
+    padding: 10px;
+    text-align: left;
+}
+
+.results-table td,
+.data-table td {
+    background: #fff;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.results-table tr:last-child td,
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Alerts */
+.alert {
+    background: #ffe4e4;
+    border: 1px solid #ffb3b3;
+    color: #a10000;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
