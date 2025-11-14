@@ -2,109 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TripMakur Flight Status</title>
+    <title>Flight Status Dashboard</title>
 
-    <!-- Google Fonts -->
+    <!-- Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
         body {
-            margin: 0;
             font-family: 'Inter', sans-serif;
-            background: #f4f7fb;
-            color: #333;
         }
-        .navbar {
-            background: #ffffff;
-            padding: 15px 25px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .navbar h1 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 600;
-            color: #2b63ff;
-        }
-        .container {
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-        .card {
-            background: #ffffff;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.07);
-            margin-bottom: 24px;
-        }
-        .btn {
-            background: #2b63ff;
-            border: none;
-            padding: 10px 18px;
-            color: white;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .btn:hover {
-            background: #1d4ed8;
-        }
-        .input {
-            width: 100%;
-            padding: 10px;
-            margin-top: 6px;
-            border-radius: 8px;
-            border: 1px solid #d3dce6;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            font-size: 14px;
-        }
-        table thead {
-            background: #e8efff;
-        }
-        table th, table td {
-            padding: 12px;
-            border-bottom: 1px solid #e5e5e5;
-            text-align: center;
-        }
-        .status {
-            font-weight: 700;
-        }
-        .flash {
-            background: #ffecec;
-            color: #b10000;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: 600;
+        .sidebar {
+            width: 260px;
         }
     </style>
-
 </head>
-<body>
 
-<div class="navbar">
-    <h1>TripMakur — Flight Status Dashboard</h1>
-</div>
+<body class="bg-gray-100">
 
-<div class="container">
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash">{{ messages[0] }}</div>
-      {% endif %}
-    {% endwith %}
+    <div class="flex">
 
-    {% block content %}{% endblock %}
-</div>
+        <!-- SIDEBAR -->
+        <aside class="sidebar bg-white h-screen shadow-md fixed">
+            <div class="p-6 border-b">
+                <h1 class="text-2xl font-bold text-blue-600">Flight Dashboard</h1>
+            </div>
 
+            <nav class="p-4">
+                <a href="{{ url_for('home') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Company Login</a>
+                <a href="{{ url_for('flight_status') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Flight Status</a>
+                <a href="{{ url_for('download_excel') }}" class="block px-4 py-2 rounded hover:bg-blue-50">Download Results</a>
+            </nav>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="ml-[260px] p-8 w-full">
+            {% block content %}
+            {% endblock %}
+        </main>
+
+    </div>
 </body>
 </html>
+
 
