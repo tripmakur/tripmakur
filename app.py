@@ -121,81 +121,58 @@ def upload_file():
     global last_results
 
     if "file" not in request.files:
-        flash("No file uploaded")
+        flash("No file uploaded.")
         return redirect(url_for("flight_status"))
 
     file = request.files["file"]
-
     if file.filename == "":
-        flash("No selected file")
+        flash("No selected file.")
         return redirect(url_for("flight_status"))
 
     try:
-        # Read Excel or CSV
-        filename = file.filename.lower()
-
-        if filename.endswith(".xlsx"):
-            df = pd.read_excel(file)
-        elif filename.endswith(".csv"):
+        # Read file (Excel or CSV)
+        if file.filename.endswith(".csv"):
             df = pd.read_csv(file)
         else:
-            flash("Unsupported file format.")
-            return redirect(url_for("flight_status"))
+            df = pd.read_excel(file, sheet_name=0)
 
-        # Normalize column names (strip, lowercase)
+        # Normalize column names
         df.columns = df.columns.str.strip().str.lower()
 
-        # Expected normalized names
-        required = {"airline", "flightnumber", "from", "to"}
+        required = ["airline", "flightnumber", "departure", "arrival"]
+        missing = [col for col in required if col not in df.columns]
 
-        # Map alternate names
-        column_map = {
-            "departure": "from",
-            "arrival": "to",
-        }
-
-        # Apply mapping
-        df.rename(columns=column_map, inplace=True)
-
-        # After renaming, check for required columns
-        if not required.issubset(set(df.columns)):
-            flash(
-                f"Missing required columns. Found: {list(df.columns)} "
-                f"Required: Airline, FlightNumber, From, To"
-            )
+        if missing:
+            flash(f"Missing required columns: {missing}")
             return redirect(url_for("flight_status"))
 
-        # Process
+        today = datetime.today().strftime("%Y-%m-%d")
         results = []
 
         for _, row in df.iterrows():
             airline = str(row["airline"]).strip().upper()
             flight_number = str(row["flightnumber"]).strip()
-            departure = str(row["from"]).strip().upper()
-            arrival = str(row["to"]).strip().upper()
+            departure = str(row["departure"]).strip().upper()
+            arrival = str(row["arrival"]).strip().upper()
 
-            status = fetch_status(airline, flight_number)
+            status = fetch_status(airline, flight_number, today)
 
-            results.append(
-                {
-                    "Airline": airline,
-                    "FlightNumber": flight_number,
-                    "From": departure,
-                    "To": arrival,
-                    "Status": status,
-                }
-            )
+            results.append({
+                "Airline": airline,
+                "FlightNumber": flight_number,
+                "From": departure,
+                "To": arrival,
+                "Status": status,
+            })
 
         last_results = results
 
-        return render_template(
-            "flight_status.html",
-            flight_info=None,
-            uploaded_results=results,
-        )
+        return render_template("flight_status.html",
+                               flight_info=None,
+                               uploaded_results=results)
 
     except Exception as e:
-        flash(f"Error processing file: {str(e)}")
+        flash(f"Error processing file: {e}")
         return redirect(url_for("flight_status"))
 
 
