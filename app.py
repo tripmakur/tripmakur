@@ -15,32 +15,26 @@ ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
 
 def load_allowed_companies():
-    """Load allowed companies from JSON and normalize them."""
     if os.path.exists(ALLOWED_COMPANIES_FILE):
         with open(ALLOWED_COMPANIES_FILE, "r") as f:
             companies = json.load(f)
-            # normalize all values
             return [c.strip().lower() for c in companies]
     return []
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
-
-# Store last results for Excel download
 last_results = []
 
 
 # -------------------------
-# Dummy Flight Status Fetch
+# Dummy Flight Status API
 # -------------------------
 def fetch_status(airline, flight_number, flight_date):
-    """Simulated API call. Replace with real API if needed."""
-    # Always return "On Time" for testing
-    return "On Time"
+    return "On Time"  # placeholder
 
 
 # -------------------------
-# Home Page (Company Check)
+# Home Page
 # -------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -55,7 +49,6 @@ def home():
             flash(f"Access denied for company: {company}")
             return render_template("index.html")
 
-        # Redirect to status checker with company in URL
         return redirect(url_for("flight_status", company=company))
 
     return render_template("index.html")
@@ -68,7 +61,6 @@ def home():
 def flight_status():
     global last_results
 
-    # Company from URL or POST
     company = (
         request.args.get("company")
         or request.form.get("company")
@@ -76,14 +68,13 @@ def flight_status():
     ).strip().lower()
 
     if company not in ALLOWED_COMPANIES:
-        flash("Access denied or company missing.")
+        flash("Access denied.")
         return redirect(url_for("home"))
 
     flight_info = None
     uploaded_results = None
 
     if request.method == "POST":
-        # Manual entry
         airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
         departure = request.form.get("departure", "").strip().upper()
@@ -152,7 +143,6 @@ def upload_file():
             df = pd.read_excel(file)
 
         df.columns = [c.strip().lower() for c in df.columns]
-
         required = ["airline", "flightnumber", "from", "to"]
 
         if not all(col in df.columns for col in required):
@@ -166,7 +156,6 @@ def upload_file():
             flight_number = str(row["flightnumber"])
             departure = str(row["from"]).upper()
             arrival = str(row["to"]).upper()
-
             date = datetime.today().strftime("%Y-%m-%d")
 
             status = fetch_status(airline, flight_number, date)
@@ -216,11 +205,9 @@ def download_excel():
     )
 
 
-# -------------------------
-# Run App
-# -------------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
