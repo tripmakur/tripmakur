@@ -1,7 +1,7 @@
 import os
 import json
-import requests
 import pandas as pd
+import requests
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 from datetime import datetime
 from io import BytesIO
@@ -9,52 +9,30 @@ from io import BytesIO
 app = Flask(__name__)
 app.secret_key = "your-secret-key"
 
-# ==============================
-# Allowed companies
-# ==============================
+# --------------------------------------
+# Allowed Companies
+# --------------------------------------
 ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
-
 def load_allowed_companies():
-    """
-    Load allowed companies from JSON file.
-    If file missing or invalid, treat as "no restriction".
-    """
     if os.path.exists(ALLOWED_COMPANIES_FILE):
-        try:
-            with open(ALLOWED_COMPANIES_FILE, "r") as f:
-                data = json.load(f)
-                return [str(c).strip().lower() for c in data]
-        except Exception:
-            # Bad file => no restriction
-            return []
-    return []  # no file => no restriction
-
+        with open(ALLOWED_COMPANIES_FILE, "r") as f:
+            return [c.strip().lower() for c in json.load(f)]
+    return []
 
 ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
-
-# ==============================
-# FlightAPI.io config
-# ==============================
+# --------------------------------------
+# FlightAPI.io Configuration
+# --------------------------------------
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY", "69175603253bb1627f7ea9cc")
 FLIGHTAPI_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}&date={date}"
 
-
-# ==============================
-# Fetch status helper
-# ==============================
+# --------------------------------------
+# Fetch Flight Status (Final Version)
+# --------------------------------------
 def fetch_status(airline, flight_number, flight_date, departure=None, arrival=None):
-    """
-    Call FlightAPI.io and return a human-friendly status.
-
-    Handles both:
-      - dict with "flights" list
-      - raw list with "status" fields
-
-    Also tries to match correct leg using departure + arrival airport codes.
-    """
     airline_code = airline.lower()
     date_str = flight_date.replace("-", "")
 
@@ -75,52 +53,50 @@ def fetch_status(airline, flight_number, flight_date, departure=None, arrival=No
         dep = (departure or "").upper()
         arr = (arrival or "").upper()
 
-        # --- CASE 1: dict with "flights" list (e.g., DL 2388, AA 329) ---
+        status_map = {
+            1: "Scheduled",
+            2: "Arrived",
+            3: "Departed",
+            4: "Delayed",
+            5: "Cancelled",
+        }
+
+        # ----------- Main flights structure -----------
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
 
-            # First try to match by departure + arrival matching the route
+            # 1. Exact match: departure + arrival
             for f in flights:
-                dep_code = str(f.get("departureAirportCode", "")).upper()
-                arr_code = str(f.get("arrivalAirportCode", "")).upper()
+                f_dep = str(f.get("departureAirportCode", "")).upper()
+                f_arr = str(f.get("arrivalAirportCode", "")).upper()
+                if dep == f_dep and arr == f_arr:
+                    return f.get("displayStatus") or status_map.get(f.get("status"), "Unknown")
 
-                if dep and arr and dep_code == dep and arr_code == arr:
-                    status = f.get("displayStatus") or f.get("status")
-                    # status may be numeric – map if needed
-                    if isinstance(status, int):
-                        numeric_map = {
-                            1: "Scheduled",
-                            2: "Arrived",
-                            3: "Departed",
-                            4: "Delayed",
-                            5: "Cancelled",
-                        }
-                        status = numeric_map.get(status, "Unknown")
-                    return status or "Unknown"
+            # 2. Match by departure airport
+            dep_matches = [f for f in flights if str(f.get("departureAirportCode", "")).upper() == dep]
+            if dep_matches:
+                # Prefer delayed or cancelled
+                for f in dep_matches:
+                    if f.get("status") in (4, 5):
+                        return status_map.get(f.get("status"), "Unknown")
+                # Otherwise use the first match
+                f = dep_matches[0]
+                return f.get("displayStatus") or status_map.get(f.get("status"), "Unknown")
 
-            # If no exact route match, fall back to first flight
+            # 3. Choose the most severe status
             if flights:
-                first = flights[0]
-                status = first.get("displayStatus") or first.get("status")
-                if isinstance(status, int):
-                    numeric_map = {
-                        1: "Scheduled",
-                        2: "Arrived",
-                        3: "Departed",
-                        4: "Delayed",
-                        5: "Cancelled",
-                    }
-                    status = numeric_map.get(status, "Unknown")
-                return status or "Unknown"
+                severity = {5: 3, 4: 2, 3: 1, 2: 1, 1: 0}
+                flights_sorted = sorted(flights, key=lambda f: severity.get(f.get("status", 0)), reverse=True)
+                f = flights_sorted[0]
+                return f.get("displayStatus") or status_map.get(f.get("status"), "Unknown")
 
             return "Not Found"
 
-        # --- CASE 2: array-style response: [{...}, {...}, {"status": "Arrived"}] ---
+        # ----------- Simple array response fallback -----------
         if isinstance(data, list):
-            # Search from the end for an element with "status"
             for item in reversed(data):
                 if isinstance(item, dict) and "status" in item:
-                    return item["status"] or "Unknown"
+                    return item.get("status") or "Unknown"
             return "Not Found"
 
         return "Not Found"
@@ -128,22 +104,20 @@ def fetch_status(airline, flight_number, flight_date, departure=None, arrival=No
     except Exception:
         return "Not Found"
 
-
-# ==============================
-# Home (company gate)
-# ==============================
+# --------------------------------------
+# Home (Company Login)
+# --------------------------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
         company = request.form.get("company", "").strip().lower()
 
         if not company:
-            flash("Please enter your company name.")
+            flash("Please enter a company name.")
             return render_template("index.html")
 
-        # Only enforce if we actually have a restriction list
-        if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
-            flash("Access denied: unauthorized company.")
+        if company not in ALLOWED_COMPANIES:
+            flash(f"Access denied for company: {company}")
             return render_template("index.html")
 
         return redirect(url_for("flight_status", company=company))
@@ -151,22 +125,24 @@ def home():
     return render_template("index.html")
 
 
-# ==============================
-# Flight status page
-# ==============================
+# --------------------------------------
+# Flight Status Page
+# --------------------------------------
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
 
-    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
+    company = (
+        request.args.get("company")
+        or request.form.get("company")
+        or ""
+    ).strip().lower()
 
-    # Only enforce if a restriction list exists
-    if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
+    if company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
 
     flight_info = None
-    uploaded_results = None
 
     if request.method == "POST":
         airline = request.form.get("airline", "").strip().upper()
@@ -174,17 +150,13 @@ def flight_status():
         departure = request.form.get("departure", "").strip().upper()
         arrival = request.form.get("arrival", "").strip().upper()
 
+        flight_date = datetime.today().strftime("%Y-%m-%d")
+
         if not all([airline, flight_number, departure, arrival]):
             flash("All fields are required.")
-            return render_template(
-                "flight_status.html",
-                company=company,
-                flight_info=None,
-                uploaded_results=None,
-            )
+            return render_template("flight_status.html", company=company)
 
-        today = datetime.today().strftime("%Y-%m-%d")
-        status = fetch_status(airline, flight_number, today, departure, arrival)
+        status = fetch_status(airline, flight_number, flight_date, departure, arrival)
 
         flight_info = {
             "Airline": airline,
@@ -196,75 +168,42 @@ def flight_status():
 
         last_results = [flight_info]
 
-    return render_template(
-        "flight_status.html",
-        company=company,
-        flight_info=flight_info,
-        uploaded_results=uploaded_results,
-    )
+    return render_template("flight_status.html", company=company, flight_info=flight_info)
 
 
-# ==============================
-# Excel upload
-# ==============================
+# --------------------------------------
+# Upload Excel Sheet
+# --------------------------------------
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
 
-    company = request.form.get("company", "").strip().lower()
-
-    # Only enforce restrictions if configured
-    if ALLOWED_COMPANIES and company and company not in ALLOWED_COMPANIES:
-        flash("Access denied.")
-        return redirect(url_for("home"))
-
-    if "file" not in request.files:
-        flash("No file uploaded.")
-        return redirect(url_for("flight_status", company=company))
-
-    file = request.files["file"]
-    if not file.filename:
-        flash("No selected file.")
-        return redirect(url_for("flight_status", company=company))
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        flash("No file selected.")
+        return redirect(url_for("flight_status"))
 
     try:
-        # Use first row as header
-        if file.filename.lower().endswith(".csv"):
-            df = pd.read_csv(file, header=0)
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file)
         else:
-            df = pd.read_excel(file, header=0)
+            df = pd.read_excel(file)
 
-        # Ensure headers are strings, then normalize
-        df.columns = df.columns.astype(str)
         df.columns = df.columns.str.strip().str.lower()
 
-        # We expect *lowercase* matching your sheet:
-        # airline, flightnumber, departure, arrival
         required = ["airline", "flightnumber", "departure", "arrival"]
-        missing = [c for c in required if c not in df.columns]
-
-        if missing:
-            flash(f"Missing required columns: {missing}")
-            return redirect(url_for("flight_status", company=company))
+        if any(col not in df.columns for col in required):
+            flash("Missing required columns: airline, flightnumber, departure, arrival")
+            return redirect(url_for("flight_status"))
 
         today = datetime.today().strftime("%Y-%m-%d")
         results = []
 
         for _, row in df.iterrows():
-            airline = str(row.get("airline", "")).strip().upper()
-            flight_number = str(row.get("flightnumber", "")).strip()
-            departure = str(row.get("departure", "")).strip().upper()
-            arrival = str(row.get("arrival", "")).strip().upper()
-
-            if not airline or not flight_number:
-                results.append({
-                    "Airline": airline,
-                    "FlightNumber": flight_number,
-                    "From": departure,
-                    "To": arrival,
-                    "Status": "Missing Data",
-                })
-                continue
+            airline = str(row["airline"]).strip().upper()
+            flight_number = str(row["flightnumber"]).strip()
+            departure = str(row["departure"]).strip().upper()
+            arrival = str(row["arrival"]).strip().upper()
 
             status = fetch_status(airline, flight_number, today, departure, arrival)
 
@@ -278,25 +217,20 @@ def upload_file():
 
         last_results = results
 
-        return render_template(
-            "flight_status.html",
-            company=company,
-            flight_info=None,
-            uploaded_results=results,
-        )
+        return render_template("flight_status.html", uploaded_results=results)
 
     except Exception as e:
         flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status", company=company))
+        return redirect(url_for("flight_status"))
 
 
-# ==============================
+# --------------------------------------
 # Download Excel
-# ==============================
+# --------------------------------------
 @app.route("/download")
 def download_excel():
     if not last_results:
-        flash("No results to download.")
+        flash("No results available.")
         return redirect(url_for("home"))
 
     df = pd.DataFrame(last_results)
@@ -304,17 +238,11 @@ def download_excel():
     df.to_excel(output, index=False)
     output.seek(0)
 
-    return send_file(
-        output,
-        download_name="flight_status_results.xlsx",
-        as_attachment=True,
-    )
+    return send_file(output, download_name="flight_status.xlsx", as_attachment=True)
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
-
+# --------------------------------------
+# Run
+# --------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
