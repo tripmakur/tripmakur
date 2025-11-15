@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Roundtrip Fare Pricing</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 25px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+        }
+
+        .row {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 25px;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        input[type="text"], input[type="date"] {
+            margin-bottom: 8px;
+            padding: 8px;
+            width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 12px 24px;
+            background-color: #0078ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #005fcc;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <h2>Roundtrip Fare Pricing (FlightAPI.io)</h2>
+
+    <p>Enter up to 10 origin cities and up to 5 destination cities.  
+       The system will generate roundtrip pricing for every combination.</p>
+
+    <form action="/fare-pricing" method="POST">
+
+        <div class="row">
+            <!-- Origins -->
+            <div class="col">
+                <h3>Origin Cities</h3>
+                {% for i in range(10) %}
+                    <input type="text" name="origin" placeholder="Origin {{ i+1 }}">
+                {% endfor %}
+            </div>
+
+            <!-- Destinations -->
+            <div class="col">
+                <h3>Destination Cities</h3>
+                {% for i in range(5) %}
+                    <input type="text" name="destination" placeholder="Destination {{ i+1 }}">
+                {% endfor %}
+            </div>
+        </div>
+
+        <h3>Outbound Date</h3>
+        <input type="date" name="depart" required>
+
+        <h3>Return Date</h3>
+        <input type="date" name="return" required>
+
+        <button type="submit">Download Fare Spreadsheet</button>
+
+    </form>
+
+</div>
+</body>
+</html>
