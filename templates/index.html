@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="max-w-md mx-auto bg-white shadow p-6 rounded">
-    <h2 class="text-xl font-bold mb-4">Enter Your Company Name</h2>
+<div class="card">
+    <h2>Authorized Company Access</h2>
+    <p>Enter your company name to access the flight status tools.</p>
 
-    <form action="/" method="POST">
-        <label class="block font-semibold mb-1">Company Name:</label>
-        <input type="text" name="company" class="w-full border p-2 rounded mb-4" required>
-
-        <button class="bg-blue-600 text-white px-4 py-2 rounded w-full">
-            Continue
-        </button>
+    <form method="POST" action="{{ url_for('home') }}">
+        <div style="margin-bottom:10px;">
+            <label for="company">Company Name</label>
+            <input type="text" id="company" name="company" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Check Flight Status</button>
     </form>
 </div>
 
 {% endblock %}
+
 
 
 
