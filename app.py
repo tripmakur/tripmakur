@@ -98,13 +98,20 @@ def home():
             flash("Please enter your company name.")
             return render_template("index.html")
 
+        # NEW LOGIC: company name "fare" goes straight to fare pricing tool
+        if company == "fare":
+            return redirect(url_for("fare_pricing"))
+
+        # Standard company validation (unchanged)
         if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
             flash("Access denied: unauthorized company.")
             return render_template("index.html")
 
+        # Normal company → flight status
         return redirect(url_for("flight_status", company=company))
 
     return render_template("index.html")
+
 
 
 # ==============================
