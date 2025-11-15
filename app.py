@@ -30,10 +30,11 @@ ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
 # ==============================
-# FlightAPI.io – Flight Status config
+# FlightAPI.io config
 # ==============================
 FLIGHTAPI_KEY = "69175603253bb1627f7ea9cc"
-FLIGHTAPI_STATUS_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}&date={date}"
+FLIGHTAPI_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}&date={date}"
+
 
 # ==============================
 # Fetch status helper
@@ -42,7 +43,7 @@ def fetch_status(airline, flight_number, flight_date):
     airline_code = airline.lower()
     date_str = flight_date.replace("-", "")
 
-    url = FLIGHTAPI_STATUS_URL.format(
+    url = FLIGHTAPI_URL.format(
         key=FLIGHTAPI_KEY,
         num=flight_number,
         airline=airline_code,
@@ -63,6 +64,7 @@ def fetch_status(airline, flight_number, flight_date):
 
             first = flights[0]
             status = first.get("displayStatus") or first.get("status")
+
             if isinstance(status, int):
                 numeric_map = {
                     1: "Scheduled",
@@ -72,6 +74,7 @@ def fetch_status(airline, flight_number, flight_date):
                     5: "Cancelled",
                 }
                 status = numeric_map.get(status, "Unknown")
+
             return status or "Unknown"
 
         if isinstance(data, list):
@@ -98,20 +101,13 @@ def home():
             flash("Please enter your company name.")
             return render_template("index.html")
 
-        # NEW LOGIC: company name "fare" goes straight to fare pricing tool
-        if company == "fare":
-            return redirect(url_for("fare_pricing"))
-
-        # Standard company validation (unchanged)
         if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
             flash("Access denied: unauthorized company.")
             return render_template("index.html")
 
-        # Normal company → flight status
         return redirect(url_for("flight_status", company=company))
 
     return render_template("index.html")
-
 
 
 # ==============================
@@ -156,10 +152,12 @@ def flight_status():
 
         last_results = [flight_info]
 
-    return render_template("flight_status.html",
-                           company=company,
-                           flight_info=flight_info,
-                           uploaded_results=uploaded_results)
+    return render_template(
+        "flight_status.html",
+        company=company,
+        flight_info=flight_info,
+        uploaded_results=uploaded_results
+    )
 
 
 # ==============================
@@ -191,7 +189,6 @@ def upload_file():
             df = pd.read_excel(file, header=0)
 
         df.columns = df.columns.astype(str)
-
         df.columns = (
             df.columns
             .str.strip()
@@ -269,70 +266,6 @@ def download_excel():
     )
 
 
-# ==========================================================
-# NEW SECTION — Fare Pricing Tool (FlightAPI.io)
-# ==========================================================
-@app.route("/fare-pricing", methods=["GET", "POST"])
-def fare_pricing():
-
-    if request.method == "GET":
-        return render_template("fare_pricing.html")
-
-    origins = [o.strip().upper() for o in request.form.getlist("origin") if o.strip()]
-    destinations = [d.strip().upper() for d in request.form.getlist("destination") if d.strip()]
-    depart_date = request.form["depart"]
-    return_date = request.form["return"]
-
-    api_key = FLIGHTAPI_KEY
-
-    rows = []
-
-    for o in origins:
-        for d in destinations:
-            url = f"https://api.flightapi.io/roundtrip/{api_key}/{o}/{d}/{depart_date}/{return_date}/1/economy"
-
-            try:
-                r = requests.get(url)
-                data = r.json()
-
-                price = None
-                if "prices" in data and len(data["prices"]) > 0:
-                    price = data["prices"][0].get("price")
-
-                rows.append({
-                    "Origin": o,
-                    "Destination": d,
-                    "Departure Date": depart_date,
-                    "Return Date": return_date,
-                    "Fare (USD)": price if price else "Not Available"
-                })
-
-            except Exception as e:
-                rows.append({
-                    "Origin": o,
-                    "Destination": d,
-                    "Departure Date": depart_date,
-                    "Return Date": return_date,
-                    "Fare (USD)": f"Error: {e}"
-                })
-
-    df = pd.DataFrame(rows)
-
-    output = BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
-
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="fare_results.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-
-# ==============================
-# Run App
-# ==============================
 if __name__ == "__main__":
     app.run(debug=True)
 
