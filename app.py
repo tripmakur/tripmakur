@@ -22,12 +22,14 @@ def load_allowed_companies():
                 data = json.load(f)
                 return [str(c).strip().lower() for c in data]
         except Exception:
+            # If file is bad, treat as "no restrictions"
             return []
-    return []
+    return []  # no file => no restriction
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
+
 
 # ==============================
 # FlightAPI.io config
@@ -40,6 +42,12 @@ FLIGHTAPI_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}
 # Fetch status helper
 # ==============================
 def fetch_status(airline, flight_number, flight_date):
+    """
+    Call FlightAPI.io and return a human-friendly status.
+    Handles both:
+      - dict with "flights" list
+      - raw list with "status" keys
+    """
     airline_code = airline.lower()
     date_str = flight_date.replace("-", "")
 
@@ -57,15 +65,17 @@ def fetch_status(airline, flight_number, flight_date):
 
         data = resp.json()
 
+        # Case 1: {"flights":[{...},{...}], "emptyResults":false}
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
             if not flights:
                 return "Not Found"
 
+            # Just take the first flight's displayStatus if present
             first = flights[0]
             status = first.get("displayStatus") or first.get("status")
-
             if isinstance(status, int):
+                # Basic numeric mapping if needed
                 numeric_map = {
                     1: "Scheduled",
                     2: "Arrived",
@@ -74,9 +84,9 @@ def fetch_status(airline, flight_number, flight_date):
                     5: "Cancelled",
                 }
                 status = numeric_map.get(status, "Unknown")
-
             return status or "Unknown"
 
+        # Case 2: list of objects, last one has {"status": "..."}
         if isinstance(data, list):
             for item in data:
                 if isinstance(item, dict) and "status" in item:
@@ -101,6 +111,7 @@ def home():
             flash("Please enter your company name.")
             return render_template("index.html")
 
+        # Only enforce if we actually have a restriction list
         if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
             flash("Access denied: unauthorized company.")
             return render_template("index.html")
@@ -119,6 +130,7 @@ def flight_status():
 
     company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
 
+    # Only enforce if we actually have any allowed companies listed
     if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -152,12 +164,10 @@ def flight_status():
 
         last_results = [flight_info]
 
-    return render_template(
-        "flight_status.html",
-        company=company,
-        flight_info=flight_info,
-        uploaded_results=uploaded_results
-    )
+    return render_template("flight_status.html",
+                           company=company,
+                           flight_info=flight_info,
+                           uploaded_results=uploaded_results)
 
 
 # ==============================
@@ -169,6 +179,7 @@ def upload_file():
 
     company = request.form.get("company", "").strip().lower()
 
+    # Only enforce restrictions if we actually have some configured
     if ALLOWED_COMPANIES and company and company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -183,12 +194,20 @@ def upload_file():
         return redirect(url_for("flight_status", company=company))
 
     try:
+        # Force first row as header
         if file.filename.lower().endswith(".csv"):
             df = pd.read_csv(file, header=0)
         else:
             df = pd.read_excel(file, header=0)
 
+        # Ensure headers are strings
         df.columns = df.columns.astype(str)
+
+        # Aggressive normalize headers:
+        # - strip spaces
+        # - remove all whitespace
+        # - remove non-letters
+        # - lowercase
         df.columns = (
             df.columns
             .str.strip()
@@ -268,9 +287,3 @@ def download_excel():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
-
