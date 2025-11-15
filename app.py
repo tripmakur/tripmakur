@@ -91,11 +91,21 @@ def fetch_status(airline, flight_number, flight_date, departure=None, arrival=No
     )
 
     try:
+           try:
         resp = requests.get(url, timeout=20)
+
+        # PRINT EVERYTHING TO RENDER LOGS
+        print("=================================")
+        print("API STATUS:", resp.status_code)
+        print("API URL:", url)
+        print("API RAW RESPONSE:", resp.text)
+        print("=================================")
+
         if resp.status_code != 200:
-            return "Not Found"
+            return f"API Error {resp.status_code}"
 
         data = resp.json()
+
         dep = (departure or "").upper()
         arr = (arrival or "").upper()
 
