@@ -22,36 +22,27 @@ def load_allowed_companies():
                 data = json.load(f)
                 return [str(c).strip().lower() for c in data]
         except Exception:
-            # If file is bad, treat as "no restrictions"
             return []
-    return []  # no file => no restriction
+    return []
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
 last_results = []
 
-
 # ==============================
-# FlightAPI.io config
+# FlightAPI.io – Flight Status config
 # ==============================
 FLIGHTAPI_KEY = "69175603253bb1627f7ea9cc"
-FLIGHTAPI_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}&date={date}"
-
+FLIGHTAPI_STATUS_URL = "https://api.flightapi.io/airline/{key}?num={num}&name={airline}&date={date}"
 
 # ==============================
 # Fetch status helper
 # ==============================
 def fetch_status(airline, flight_number, flight_date):
-    """
-    Call FlightAPI.io and return a human-friendly status.
-    Handles both:
-      - dict with "flights" list
-      - raw list with "status" keys
-    """
     airline_code = airline.lower()
     date_str = flight_date.replace("-", "")
 
-    url = FLIGHTAPI_URL.format(
+    url = FLIGHTAPI_STATUS_URL.format(
         key=FLIGHTAPI_KEY,
         num=flight_number,
         airline=airline_code,
@@ -65,17 +56,14 @@ def fetch_status(airline, flight_number, flight_date):
 
         data = resp.json()
 
-        # Case 1: {"flights":[{...},{...}], "emptyResults":false}
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
             if not flights:
                 return "Not Found"
 
-            # Just take the first flight's displayStatus if present
             first = flights[0]
             status = first.get("displayStatus") or first.get("status")
             if isinstance(status, int):
-                # Basic numeric mapping if needed
                 numeric_map = {
                     1: "Scheduled",
                     2: "Arrived",
@@ -86,7 +74,6 @@ def fetch_status(airline, flight_number, flight_date):
                 status = numeric_map.get(status, "Unknown")
             return status or "Unknown"
 
-        # Case 2: list of objects, last one has {"status": "..."}
         if isinstance(data, list):
             for item in data:
                 if isinstance(item, dict) and "status" in item:
@@ -111,7 +98,6 @@ def home():
             flash("Please enter your company name.")
             return render_template("index.html")
 
-        # Only enforce if we actually have a restriction list
         if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
             flash("Access denied: unauthorized company.")
             return render_template("index.html")
@@ -130,7 +116,6 @@ def flight_status():
 
     company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
 
-    # Only enforce if we actually have any allowed companies listed
     if ALLOWED_COMPANIES and company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -179,7 +164,6 @@ def upload_file():
 
     company = request.form.get("company", "").strip().lower()
 
-    # Only enforce restrictions if we actually have some configured
     if ALLOWED_COMPANIES and company and company not in ALLOWED_COMPANIES:
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -194,20 +178,13 @@ def upload_file():
         return redirect(url_for("flight_status", company=company))
 
     try:
-        # Force first row as header
         if file.filename.lower().endswith(".csv"):
             df = pd.read_csv(file, header=0)
         else:
             df = pd.read_excel(file, header=0)
 
-        # Ensure headers are strings
         df.columns = df.columns.astype(str)
 
-        # Aggressive normalize headers:
-        # - strip spaces
-        # - remove all whitespace
-        # - remove non-letters
-        # - lowercase
         df.columns = (
             df.columns
             .str.strip()
@@ -283,6 +260,75 @@ def download_excel():
         download_name="flight_status_results.xlsx",
         as_attachment=True,
     )
+
+
+# ==========================================================
+# NEW SECTION — Fare Pricing Tool (FlightAPI.io)
+# ==========================================================
+@app.route("/fare-pricing", methods=["GET", "POST"])
+def fare_pricing():
+
+    if request.method == "GET":
+        return render_template("fare_pricing.html")
+
+    origins = [o.strip().upper() for o in request.form.getlist("origin") if o.strip()]
+    destinations = [d.strip().upper() for d in request.form.getlist("destination") if d.strip()]
+    depart_date = request.form["depart"]
+    return_date = request.form["return"]
+
+    api_key = FLIGHTAPI_KEY
+
+    rows = []
+
+    for o in origins:
+        for d in destinations:
+            url = f"https://api.flightapi.io/roundtrip/{api_key}/{o}/{d}/{depart_date}/{return_date}/1/economy"
+
+            try:
+                r = requests.get(url)
+                data = r.json()
+
+                price = None
+                if "prices" in data and len(data["prices"]) > 0:
+                    price = data["prices"][0].get("price")
+
+                rows.append({
+                    "Origin": o,
+                    "Destination": d,
+                    "Departure Date": depart_date,
+                    "Return Date": return_date,
+                    "Fare (USD)": price if price else "Not Available"
+                })
+
+            except Exception as e:
+                rows.append({
+                    "Origin": o,
+                    "Destination": d,
+                    "Departure Date": depart_date,
+                    "Return Date": return_date,
+                    "Fare (USD)": f"Error: {e}"
+                })
+
+    df = pd.DataFrame(rows)
+
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="fare_results.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+# ==============================
+# Run App
+# ==============================
+if __name__ == "__main__":
+    app.run(debug=True)
+
 
 
 if __name__ == "__main__":
