@@ -30,8 +30,7 @@ def flight_analysis():
             flash("Please select outbound and return dates.")
             return redirect(url_for("flight_analysis", company=company))
 
-        # Perform a simple placeholder result list
-        # You will replace this with Amadeus API logic next
+        # Temporary placeholder
         analysis_results = []
         for origin in origins:
             for destination in destinations:
@@ -47,4 +46,5 @@ def flight_analysis():
         company=company,
         analysis_results=analysis_results
     )
+
 
