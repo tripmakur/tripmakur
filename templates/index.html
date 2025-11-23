@@ -1,16 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
-    <h2>Authorized Company Access</h2>
-    <p>Enter your company name to access the flight status tools.</p>
+<div class="max-w-xl mx-auto bg-white p-6 shadow rounded">
+    <h1 class="text-2xl font-bold mb-4 text-gray-800">Authorized Company Access</h1>
 
-    <form method="POST" action="{{ url_for('home') }}">
-        <div style="margin-bottom:10px;">
-            <label for="company">Company Name</label>
-            <input type="text" id="company" name="company" required>
+    <p class="text-gray-600 mb-4">
+        Enter your company name to access the TripMakur tools.
+    </p>
+
+    <form method="POST" action="{{ url_for('home') }}" class="space-y-4">
+        <div>
+            <label class="block font-semibold text-gray-700">Company Name:</label>
+            <input
+                type="text"
+                name="company"
+                required
+                class="border p-2 rounded w-full"
+                placeholder="Enter your company"
+            >
         </div>
-        <button type="submit" class="btn btn-primary">Check Flight Status</button>
+
+        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+            Continue
+        </button>
     </form>
 </div>
 
