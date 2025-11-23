@@ -401,14 +401,24 @@ def flight_analysis():
 
     if request.method == "POST":
 
-        # ✔ READ FIELDS EXACTLY AS HTML SENDS THEM
-        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
-        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
+        # Read origin1–origin10
+        origins = []
+        for i in range(1, 11):
+            val = request.form.get(f"origin{i}", "").strip().upper()
+            if val:
+                origins.append(val)
+
+        # Read dest1–dest3
+        destinations = []
+        for i in range(1, 4):
+            val = request.form.get(f"dest{i}", "").strip().upper()
+            if val:
+                destinations.append(val)
 
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
 
-        # VALIDATION
+        # Validation
         if not origins or not destinations:
             flash("Please enter at least one origin and one destination.")
             return render_template(
@@ -425,11 +435,13 @@ def flight_analysis():
                 analysis_results=None
             )
 
-        # RUN ANALYSIS
+        # Run Amadeus pricing
         analysis_results = []
         for origin in origins:
             for dest in destinations:
-                result = search_lowest_fare_amadeus(origin, dest, outbound_date, return_date)
+                result = search_lowest_fare_amadeus(
+                    origin, dest, outbound_date, return_date
+                )
 
                 analysis_results.append({
                     "Origin": origin,
@@ -448,6 +460,3 @@ def flight_analysis():
         company=company,
         analysis_results=analysis_results
     )
-
-
-
