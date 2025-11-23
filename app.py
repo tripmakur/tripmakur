@@ -29,8 +29,8 @@ def load_allowed_companies():
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
-last_results = []  # for flight status download
-last_analysis_results = []  # for flight analysis download
+last_results = []            # for flight status download
+last_analysis_results = []   # for flight analysis download
 
 
 def is_company_allowed(company: str) -> bool:
@@ -52,7 +52,7 @@ def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -
     """
     Fetch a flight's status from FlightAPI.io.
 
-    Handles both:
+    Handles:
     - list-style response: [ {departure...}, {arrival...}, {status: "..."} ]
     - dict with "flights": [...]
     """
@@ -71,14 +71,14 @@ def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -
 
         data = resp.json()
 
-        # Case 1: simple list response with a status
+        # Case 1: simple list with a status object
         if isinstance(data, list):
             for block in data:
                 if isinstance(block, dict) and "status" in block:
                     return block.get("status") or "Unknown"
             return "Not Found"
 
-        # Case 2: dictionary with 'flights' array
+        # Case 2: dict with 'flights'
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
             if not flights:
@@ -105,10 +105,10 @@ def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -
 # ================================
 # Amadeus Settings (Flight Analysis)
 # ================================
-AMADEUS_CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID", "YOUR_AMADEUS_API_KEY")
-AMADEUS_CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET", "YOUR_AMADEUS_API_SECRET")
+# Use env vars if present, otherwise fall back to the keys you gave me
+AMADEUS_CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID", "ZGOUVp1fU3EGHoNGEuNgjJDtunQ9GgNe")
+AMADEUS_CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET", "4oJvcvPX5qWd0dgh")
 
-# Use test environment by default
 AMADEUS_AUTH_URL = "https://test.api.amadeus.com/v1/security/oauth2/token"
 AMADEUS_FLIGHT_OFFERS_URL = "https://test.api.amadeus.com/v2/shopping/flight-offers"
 
@@ -119,6 +119,9 @@ amadeus_token_expiry = 0  # epoch seconds
 def get_amadeus_token():
     """Get or refresh Amadeus OAuth token."""
     global amadeus_token, amadeus_token_expiry
+
+    if not AMADEUS_CLIENT_ID or not AMADEUS_CLIENT_SECRET:
+        raise RuntimeError("Amadeus credentials not configured")
 
     now = time.time()
     if amadeus_token and now < amadeus_token_expiry:
@@ -148,7 +151,7 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
     Search lowest roundtrip fare using Amadeus.
 
     origin/destination: IATA codes
-    departure_date/return_date: YYYY-MM-DD
+    dates: YYYY-MM-DD
     """
     try:
         token = get_amadeus_token()
@@ -162,7 +165,7 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
         "returnDate": return_date,
         "adults": 1,
         "currencyCode": "USD",
-        "max": 1,  # just the cheapest
+        "max": 1,
     }
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -418,12 +421,10 @@ def flight_analysis():
             flash("Please enter both outbound and return dates.")
             return render_template("flight_analysis.html", company=company)
 
-        # Call Amadeus for each origin-destination pair
         analysis_results = []
         for o in origins:
             for d in destinations:
                 result = search_lowest_fare_amadeus(o, d, outbound_date, return_date)
-                # Ensure all expected keys exist
                 row = {
                     "Origin": o,
                     "Destination": d,
@@ -467,3 +468,4 @@ def download_analysis_excel():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
