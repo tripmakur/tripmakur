@@ -1,92 +1,69 @@
-{% extends "base.html" %}
-{% block content %}
+@app.route("/flight-analysis", methods=["GET", "POST"])
+def flight_analysis():
+    global last_analysis_results
 
-<h1 class="text-3xl font-bold mb-6 text-gray-800">Flight Analysis</h1>
+    company = (
+        request.args.get("company")
+        or request.form.get("company")
+        or ""
+    ).strip().lower()
 
-<div class="bg-white p-6 shadow rounded mb-8">
+    if not is_company_allowed(company):
+        flash("Access denied.")
+        return redirect(url_for("home"))
 
-    <form method="POST" action="{{ url_for('flight_analysis', company=company) }}" class="space-y-6">
+    analysis_results = None
 
-        <!-- Origins -->
-        <div>
-            <h3 class="text-xl font-semibold mb-2">Origin Airports (Up to 10)</h3>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {% for i in range(10) %}
-                <input type="text" name="origins"
-                       placeholder="Origin {{ i+1 }}"
-                       class="border p-2 rounded w-full">
-                {% endfor %}
-            </div>
-        </div>
+    if request.method == "POST":
 
-        <!-- Destinations -->
-        <div>
-            <h3 class="text-xl font-semibold mb-2">Destination Airports (Up to 3)</h3>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {% for i in range(3) %}
-                <input type="text" name="destinations"
-                       placeholder="Destination {{ i+1 }}"
-                       class="border p-2 rounded w-full">
-                {% endfor %}
-            </div>
-        </div>
+        # ✔ READ FIELDS EXACTLY AS HTML SENDS THEM
+        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
+        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
 
-        <!-- Dates -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="font-semibold">Outbound Date</label>
-                <input type="date" name="outbound_date" required class="border p-2 rounded w-full">
-            </div>
+        outbound_date = request.form.get("outbound_date", "").strip()
+        return_date = request.form.get("return_date", "").strip()
 
-            <div>
-                <label class="font-semibold">Return Date</label>
-                <input type="date" name="return_date" required class="border p-2 rounded w-full">
-            </div>
-        </div>
+        # VALIDATION
+        if not origins or not destinations:
+            flash("Please enter at least one origin and one destination.")
+            return render_template(
+                "flight_analysis.html",
+                company=company,
+                analysis_results=None
+            )
 
-        <button class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">
-            Run Analysis
-        </button>
+        if not outbound_date or not return_date:
+            flash("Please select outbound and return dates.")
+            return render_template(
+                "flight_analysis.html",
+                company=company,
+                analysis_results=None
+            )
 
-    </form>
+        # RUN ANALYSIS
+        analysis_results = []
+        for origin in origins:
+            for dest in destinations:
+                result = search_lowest_fare_amadeus(origin, dest, outbound_date, return_date)
 
-</div>
+                analysis_results.append({
+                    "Origin": origin,
+                    "Destination": dest,
+                    "DepartureDate": outbound_date,
+                    "ReturnDate": return_date,
+                    "Price": result.get("Price"),
+                    "Currency": result.get("Currency", "USD"),
+                    "Error": result.get("Error", "")
+                })
 
-{% if analysis_results %}
-<div class="bg-white p-6 shadow rounded mb-8">
-    <h2 class="text-2xl font-bold mb-4">Results</h2>
+        last_analysis_results = analysis_results
 
-    <table class="w-full border-collapse">
-        <thead class="bg-gray-200">
-            <tr>
-                <th class="p-2 border">Origin</th>
-                <th class="p-2 border">Destination</th>
-                <th class="p-2 border">Price</th>
-                <th class="p-2 border">Currency</th>
-                <th class="p-2 border">Error</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in analysis_results %}
-            <tr>
-                <td class="p-2 border">{{ row.Origin }}</td>
-                <td class="p-2 border">{{ row.Destination }}</td>
-                <td class="p-2 border">{{ row.Price }}</td>
-                <td class="p-2 border">{{ row.Currency }}</td>
-                <td class="p-2 border text-red-600">{{ row.Error }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    return render_template(
+        "flight_analysis.html",
+        company=company,
+        analysis_results=analysis_results
+    )
 
-    <a href="{{ url_for('download_analysis_excel') }}"
-       class="inline-block mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-        Download Excel
-    </a>
-</div>
-{% endif %}
-
-{% endblock %}
 
 
 
