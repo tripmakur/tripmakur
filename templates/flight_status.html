@@ -1,74 +1,74 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
+<!-- Top nav for status/analysis -->
+<div class="tm-card" style="margin-bottom: 10px;">
+    <a href="{{ url_for('flight_status', company=company) }}">Flight Status</a> |
+    <a href="{{ url_for('flight_analysis', company=company) }}">Flight Analysis</a>
+</div>
+
+<div class="tm-card">
     <h2>Flight Status Dashboard</h2>
     <p><strong>Company:</strong> {{ company or "N/A" }}</p>
 </div>
 
-<!-- Manual search -->
-<div class="card">
-    <h3>Check Single Flight</h3>
-    <form method="POST" action="{{ url_for('flight_status', company=company) }}">
-        <input type="hidden" name="company" value="{{ company }}">
+<div class="tm-flex">
+    <!-- Manual Lookup -->
+    <div class="tm-card tm-flex-item">
+        <h3>Check Single Flight</h3>
+        <form method="POST" action="{{ url_for('flight_status', company=company) }}">
+            <input type="hidden" name="company" value="{{ company }}">
+            <div class="tm-field">
+                <label>Airline Code (e.g. DL)</label>
+                <input type="text" name="airline" required>
+            </div>
+            <div class="tm-field">
+                <label>Flight Number (e.g. 1636)</label>
+                <input type="text" name="flight_number" required>
+            </div>
+            <div class="tm-field">
+                <label>Departure Airport (IATA, e.g. JFK)</label>
+                <input type="text" name="departure" required>
+            </div>
+            <div class="tm-field">
+                <label>Arrival Airport (IATA, e.g. TPA)</label>
+                <input type="text" name="arrival" required>
+            </div>
+            <button type="submit" class="tm-btn tm-btn-primary">Check Status</button>
+        </form>
 
-        <div style="margin-bottom:10px;">
-            <label>Airline Code (e.g. DL)</label>
-            <input type="text" name="airline" required>
+        {% if flight_info %}
+        <div class="tm-result">
+            <h4>Manual Lookup Result</h4>
+            <table class="tm-table">
+                <tr><th>Airline</th><td>{{ flight_info.Airline }}</td></tr>
+                <tr><th>Flight</th><td>{{ flight_info.FlightNumber }}</td></tr>
+                <tr><th>From</th><td>{{ flight_info.From }}</td></tr>
+                <tr><th>To</th><td>{{ flight_info.To }}</td></tr>
+                <tr><th>Status</th><td><strong>{{ flight_info.Status }}</strong></td></tr>
+            </table>
         </div>
+        {% endif %}
+    </div>
 
-        <div style="margin-bottom:10px;">
-            <label>Flight Number (e.g. 1636)</label>
-            <input type="text" name="flight_number" required>
-        </div>
-
-        <div style="margin-bottom:10px;">
-            <label>Departure Airport (IATA, e.g. JFK)</label>
-            <input type="text" name="departure" required>
-        </div>
-
-        <div style="margin-bottom:10px;">
-            <label>Arrival Airport (IATA, e.g. TPA)</label>
-            <input type="text" name="arrival" required>
-        </div>
-
-        <button type="submit" class="btn btn-primary">Check Status</button>
-    </form>
-</div>
-
-{% if flight_info %}
-<div class="card">
-    <h3>Manual Lookup Result</h3>
-    <table>
-        <tr><th>Airline</th><td>{{ flight_info.Airline }}</td></tr>
-        <tr><th>Flight</th><td>{{ flight_info.FlightNumber }}</td></tr>
-        <tr><th>From</th><td>{{ flight_info.From }}</td></tr>
-        <tr><th>To</th><td>{{ flight_info.To }}</td></tr>
-        <tr><th>Status</th><td><strong>{{ flight_info.Status }}</strong></td></tr>
-    </table>
-</div>
-{% endif %}
-
-<!-- Excel upload -->
-<div class="card">
-    <h3>Upload Excel/CSV</h3>
-    <p>File must contain columns: <code>airline</code>, <code>flightnumber</code>, <code>departure</code>, <code>arrival</code></p>
-
-    <form method="POST"
-          action="{{ url_for('upload_file', company=company) }}"
-          enctype="multipart/form-data">
-        <input type="hidden" name="company" value="{{ company }}">
-        <div style="margin-bottom:10px;">
-            <input type="file" name="file" accept=".xlsx,.csv" required>
-        </div>
-        <button type="submit" class="btn btn-success">Upload & Check Status</button>
-    </form>
+    <!-- Excel Upload -->
+    <div class="tm-card tm-flex-item">
+        <h3>Upload Excel / CSV</h3>
+        <p>File must contain columns: <code>airline</code>, <code>flightnumber</code>, <code>departure</code>, <code>arrival</code></p>
+        <form method="POST" action="{{ url_for('upload_file', company=company) }}" enctype="multipart/form-data">
+            <input type="hidden" name="company" value="{{ company }}">
+            <div class="tm-field">
+                <input type="file" name="file" accept=".xlsx,.csv" required>
+            </div>
+            <button type="submit" class="tm-btn tm-btn-secondary">Upload & Check Status</button>
+        </form>
+    </div>
 </div>
 
 {% if uploaded_results %}
-<div class="card">
+<div class="tm-card">
     <h3>Uploaded Flight Results</h3>
-    <table>
+    <table class="tm-table">
         <thead>
             <tr>
                 <th>Airline</th>
@@ -90,14 +90,14 @@
             {% endfor %}
         </tbody>
     </table>
-
-    <form method="GET" action="{{ url_for('download_excel') }}" style="margin-top:10px;">
-        <button type="submit" class="btn btn-primary">Download Results as Excel</button>
+    <form method="GET" action="{{ url_for('download_excel') }}">
+        <button type="submit" class="tm-btn tm-btn-primary" style="margin-top:10px;">Download Results as Excel</button>
     </form>
 </div>
 {% endif %}
 
 {% endblock %}
+
 
 
 
