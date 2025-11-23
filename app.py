@@ -401,18 +401,9 @@ def flight_analysis():
 
     if request.method == "POST":
 
-        # Read the actual HTML field names
-        origins = []
-        for i in range(1, 10+1):
-            val = request.form.get(f"origin{i}", "").strip().upper()
-            if val:
-                origins.append(val)
-
-        destinations = []
-        for i in range(1, 3+1):
-            val = request.form.get(f"dest{i}", "").strip().upper()
-            if val:
-                destinations.append(val)
+        # ✔ READ FIELDS EXACTLY AS HTML SENDS THEM
+        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
+        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
 
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
@@ -420,32 +411,34 @@ def flight_analysis():
         # VALIDATION
         if not origins or not destinations:
             flash("Please enter at least one origin and one destination.")
-            return render_template("flight_analysis.html", company=company)
+            return render_template(
+                "flight_analysis.html",
+                company=company,
+                analysis_results=None
+            )
 
         if not outbound_date or not return_date:
             flash("Please select outbound and return dates.")
-            return render_template("flight_analysis.html", company=company)
+            return render_template(
+                "flight_analysis.html",
+                company=company,
+                analysis_results=None
+            )
 
         # RUN ANALYSIS
         analysis_results = []
-
         for origin in origins:
             for dest in destinations:
-                res = search_lowest_fare_amadeus(
-                    origin,
-                    dest,
-                    outbound_date,
-                    return_date
-                )
+                result = search_lowest_fare_amadeus(origin, dest, outbound_date, return_date)
 
                 analysis_results.append({
                     "Origin": origin,
                     "Destination": dest,
                     "DepartureDate": outbound_date,
                     "ReturnDate": return_date,
-                    "Price": res.get("Price"),
-                    "Currency": res.get("Currency", "USD"),
-                    "Error": res.get("Error", "")
+                    "Price": result.get("Price"),
+                    "Currency": result.get("Currency", "USD"),
+                    "Error": result.get("Error", "")
                 })
 
         last_analysis_results = analysis_results
@@ -453,7 +446,7 @@ def flight_analysis():
     return render_template(
         "flight_analysis.html",
         company=company,
-        analysis_results=analysis_results,
+        analysis_results=analysis_results
     )
 
 
