@@ -401,18 +401,18 @@ def flight_analysis():
 
     if request.method == "POST":
 
-        # OPTION 1 FIX — Use getlist() to match your HTML field names
-        origins = [
-            o.strip().upper()
-            for o in request.form.getlist("origins")
-            if o.strip()
-        ]
+        # Read the actual HTML field names
+        origins = []
+        for i in range(1, 10+1):
+            val = request.form.get(f"origin{i}", "").strip().upper()
+            if val:
+                origins.append(val)
 
-        destinations = [
-            d.strip().upper()
-            for d in request.form.getlist("destinations")
-            if d.strip()
-        ]
+        destinations = []
+        for i in range(1, 3+1):
+            val = request.form.get(f"dest{i}", "").strip().upper()
+            if val:
+                destinations.append(val)
 
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
@@ -426,11 +426,12 @@ def flight_analysis():
             flash("Please select outbound and return dates.")
             return render_template("flight_analysis.html", company=company)
 
-        # RUN ANALYSIS — call Amadeus logic
+        # RUN ANALYSIS
         analysis_results = []
+
         for origin in origins:
             for dest in destinations:
-                result = search_lowest_fare_amadeus(
+                res = search_lowest_fare_amadeus(
                     origin,
                     dest,
                     outbound_date,
@@ -442,9 +443,9 @@ def flight_analysis():
                     "Destination": dest,
                     "DepartureDate": outbound_date,
                     "ReturnDate": return_date,
-                    "Price": result.get("Price"),
-                    "Currency": result.get("Currency", "USD"),
-                    "Error": result.get("Error", "")
+                    "Price": res.get("Price"),
+                    "Currency": res.get("Currency", "USD"),
+                    "Error": res.get("Error", "")
                 })
 
         last_analysis_results = analysis_results
@@ -452,7 +453,8 @@ def flight_analysis():
     return render_template(
         "flight_analysis.html",
         company=company,
-        analysis_results=analysis_results
+        analysis_results=analysis_results,
     )
+
 
 
