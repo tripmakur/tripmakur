@@ -1,125 +1,92 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="container mx-auto p-6">
+<h1 class="text-3xl font-bold mb-6 text-gray-800">Flight Analysis</h1>
 
-    <!-- Top navigation links -->
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-900">Flight Status</h1>
+<div class="bg-white p-6 shadow rounded mb-8">
 
-        <a href="{{ url_for('flight_analysis', company=company) }}"
-           class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
-            Flight Analysis
-        </a>
-    </div>
+    <form method="POST" action="{{ url_for('flight_analysis', company=company) }}" class="space-y-6">
 
-    <!-- MANUAL LOOKUP -->
-    <div class="bg-white shadow-md rounded p-6 mb-10">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Check Flight Status</h2>
-
-        <form method="POST" action="{{ url_for('flight_status', company=company) }}" class="space-y-4">
-
-            <div>
-                <label class="block mb-1 font-semibold text-gray-700">Airline Code (e.g., DL)</label>
-                <input type="text" name="airline" required
-                       class="border rounded p-2 w-full" />
-            </div>
-
-            <div>
-                <label class="block mb-1 font-semibold text-gray-700">Flight Number</label>
-                <input type="text" name="flight_number" required
-                       class="border rounded p-2 w-full" />
-            </div>
-
-            <div>
-                <label class="block mb-1 font-semibold text-gray-700">Departure Airport (IATA)</label>
-                <input type="text" name="departure" required
-                       class="border rounded p-2 w-full" />
-            </div>
-
-            <div>
-                <label class="block mb-1 font-semibold text-gray-700">Arrival Airport (IATA)</label>
-                <input type="text" name="arrival" required
-                       class="border rounded p-2 w-full" />
-            </div>
-
-            <button class="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700">
-                Check Status
-            </button>
-        </form>
-    </div>
-
-    <!-- MANUAL SEARCH RESULT -->
-    {% if flight_info %}
-    <div class="bg-gray-50 border rounded p-6 shadow mb-10">
-        <h3 class="text-xl font-semibold mb-4">Flight Result</h3>
-
-        <ul class="space-y-2 text-lg">
-            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
-            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
-            <li><strong>From:</strong> {{ flight_info.From }}</li>
-            <li><strong>To:</strong> {{ flight_info.To }}</li>
-            <li><strong>Status:</strong> 
-                <span class="font-bold text-blue-700">{{ flight_info.Status }}</span>
-            </li>
-        </ul>
-    </div>
-    {% endif %}
-
-    <!-- EXCEL UPLOAD -->
-    <div class="bg-white shadow-md rounded p-6 mb-10">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Excel or CSV</h2>
-        <p class="mb-3 text-gray-600">Required columns: <strong>airline, flightnumber, departure, arrival</strong></p>
-
-        <form action="{{ url_for('upload_file', company=company) }}" method="POST"
-              enctype="multipart/form-data" class="space-y-4">
-
-            <input type="file" name="file" accept=".xlsx,.csv"
-                   class="border rounded p-2 w-full bg-gray-50" required />
-
-            <button class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">
-                Upload & Check Flights
-            </button>
-        </form>
-    </div>
-
-    <!-- UPLOADED RESULTS -->
-    {% if uploaded_results %}
-    <div class="bg-white shadow-md rounded p-6 mb-6 overflow-x-auto">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Uploaded Flight Results</h2>
-
-        <table class="w-full border-collapse">
-            <thead class="bg-gray-200">
-                <tr>
-                    <th class="border p-2">Airline</th>
-                    <th class="border p-2">Flight</th>
-                    <th class="border p-2">From</th>
-                    <th class="border p-2">To</th>
-                    <th class="border p-2">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in uploaded_results %}
-                <tr class="hover:bg-gray-50">
-                    <td class="border p-2">{{ row.Airline }}</td>
-                    <td class="border p-2">{{ row.FlightNumber }}</td>
-                    <td class="border p-2">{{ row.From }}</td>
-                    <td class="border p-2">{{ row.To }}</td>
-                    <td class="border p-2 font-semibold text-blue-700">{{ row.Status }}</td>
-                </tr>
+        <!-- Origins -->
+        <div>
+            <h3 class="text-xl font-semibold mb-2">Origin Airports (Up to 10)</h3>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {% for i in range(10) %}
+                <input type="text" name="origins"
+                       placeholder="Origin {{ i+1 }}"
+                       class="border p-2 rounded w-full">
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+        </div>
 
-        <a href="{{ url_for('download_excel') }}"
-           class="inline-block mt-4 bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700">
-            Download Results (Excel)
-        </a>
-    </div>
-    {% endif %}
+        <!-- Destinations -->
+        <div>
+            <h3 class="text-xl font-semibold mb-2">Destination Airports (Up to 3)</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {% for i in range(3) %}
+                <input type="text" name="destinations"
+                       placeholder="Destination {{ i+1 }}"
+                       class="border p-2 rounded w-full">
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Dates -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="font-semibold">Outbound Date</label>
+                <input type="date" name="outbound_date" required class="border p-2 rounded w-full">
+            </div>
+
+            <div>
+                <label class="font-semibold">Return Date</label>
+                <input type="date" name="return_date" required class="border p-2 rounded w-full">
+            </div>
+        </div>
+
+        <button class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">
+            Run Analysis
+        </button>
+
+    </form>
 
 </div>
 
+{% if analysis_results %}
+<div class="bg-white p-6 shadow rounded mb-8">
+    <h2 class="text-2xl font-bold mb-4">Results</h2>
+
+    <table class="w-full border-collapse">
+        <thead class="bg-gray-200">
+            <tr>
+                <th class="p-2 border">Origin</th>
+                <th class="p-2 border">Destination</th>
+                <th class="p-2 border">Price</th>
+                <th class="p-2 border">Currency</th>
+                <th class="p-2 border">Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in analysis_results %}
+            <tr>
+                <td class="p-2 border">{{ row.Origin }}</td>
+                <td class="p-2 border">{{ row.Destination }}</td>
+                <td class="p-2 border">{{ row.Price }}</td>
+                <td class="p-2 border">{{ row.Currency }}</td>
+                <td class="p-2 border text-red-600">{{ row.Error }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{{ url_for('download_analysis_excel') }}"
+       class="inline-block mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+        Download Excel
+    </a>
+</div>
+{% endif %}
+
 {% endblock %}
+
 
 
