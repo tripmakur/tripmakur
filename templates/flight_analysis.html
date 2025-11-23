@@ -1,50 +1,125 @@
-@app.route("/flight-analysis", methods=["GET", "POST"])
-def flight_analysis():
-    company = (
-        request.args.get("company")
-        or request.form.get("company")
-        or ""
-    ).strip().lower()
+{% extends "base.html" %}
+{% block content %}
 
-    if company not in ALLOWED_COMPANIES:
-        flash("Access denied.")
-        return redirect(url_for("home"))
+<div class="container mx-auto p-6">
 
-    analysis_results = None
+    <!-- Top navigation links -->
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Flight Status</h1>
 
-    if request.method == "POST":
+        <a href="{{ url_for('flight_analysis', company=company) }}"
+           class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
+            Flight Analysis
+        </a>
+    </div>
 
-        # IMPORTANT: Use getlist() to capture all repeated fields
-        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
-        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
+    <!-- MANUAL LOOKUP -->
+    <div class="bg-white shadow-md rounded p-6 mb-10">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Check Flight Status</h2>
 
-        outbound_date = request.form.get("outbound_date", "").strip()
-        return_date = request.form.get("return_date", "").strip()
+        <form method="POST" action="{{ url_for('flight_status', company=company) }}" class="space-y-4">
 
-        # Validation
-        if not origins or not destinations:
-            flash("Please enter at least one origin and one destination.")
-            return redirect(url_for("flight_analysis", company=company))
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Airline Code (e.g., DL)</label>
+                <input type="text" name="airline" required
+                       class="border rounded p-2 w-full" />
+            </div>
 
-        if not outbound_date or not return_date:
-            flash("Please select outbound and return dates.")
-            return redirect(url_for("flight_analysis", company=company))
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Flight Number</label>
+                <input type="text" name="flight_number" required
+                       class="border rounded p-2 w-full" />
+            </div>
 
-        # Temporary placeholder
-        analysis_results = []
-        for origin in origins:
-            for destination in destinations:
-                analysis_results.append({
-                    "origin": origin,
-                    "destination": destination,
-                    "price": "N/A",
-                    "currency": "USD"
-                })
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Departure Airport (IATA)</label>
+                <input type="text" name="departure" required
+                       class="border rounded p-2 w-full" />
+            </div>
 
-    return render_template(
-        "flight_analysis.html",
-        company=company,
-        analysis_results=analysis_results
-    )
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Arrival Airport (IATA)</label>
+                <input type="text" name="arrival" required
+                       class="border rounded p-2 w-full" />
+            </div>
+
+            <button class="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700">
+                Check Status
+            </button>
+        </form>
+    </div>
+
+    <!-- MANUAL SEARCH RESULT -->
+    {% if flight_info %}
+    <div class="bg-gray-50 border rounded p-6 shadow mb-10">
+        <h3 class="text-xl font-semibold mb-4">Flight Result</h3>
+
+        <ul class="space-y-2 text-lg">
+            <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
+            <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
+            <li><strong>From:</strong> {{ flight_info.From }}</li>
+            <li><strong>To:</strong> {{ flight_info.To }}</li>
+            <li><strong>Status:</strong> 
+                <span class="font-bold text-blue-700">{{ flight_info.Status }}</span>
+            </li>
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- EXCEL UPLOAD -->
+    <div class="bg-white shadow-md rounded p-6 mb-10">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Excel or CSV</h2>
+        <p class="mb-3 text-gray-600">Required columns: <strong>airline, flightnumber, departure, arrival</strong></p>
+
+        <form action="{{ url_for('upload_file', company=company) }}" method="POST"
+              enctype="multipart/form-data" class="space-y-4">
+
+            <input type="file" name="file" accept=".xlsx,.csv"
+                   class="border rounded p-2 w-full bg-gray-50" required />
+
+            <button class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">
+                Upload & Check Flights
+            </button>
+        </form>
+    </div>
+
+    <!-- UPLOADED RESULTS -->
+    {% if uploaded_results %}
+    <div class="bg-white shadow-md rounded p-6 mb-6 overflow-x-auto">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Uploaded Flight Results</h2>
+
+        <table class="w-full border-collapse">
+            <thead class="bg-gray-200">
+                <tr>
+                    <th class="border p-2">Airline</th>
+                    <th class="border p-2">Flight</th>
+                    <th class="border p-2">From</th>
+                    <th class="border p-2">To</th>
+                    <th class="border p-2">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in uploaded_results %}
+                <tr class="hover:bg-gray-50">
+                    <td class="border p-2">{{ row.Airline }}</td>
+                    <td class="border p-2">{{ row.FlightNumber }}</td>
+                    <td class="border p-2">{{ row.From }}</td>
+                    <td class="border p-2">{{ row.To }}</td>
+                    <td class="border p-2 font-semibold text-blue-700">{{ row.Status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="{{ url_for('download_excel') }}"
+           class="inline-block mt-4 bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700">
+            Download Results (Excel)
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}
 
 
