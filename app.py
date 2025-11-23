@@ -148,71 +148,73 @@ def get_amadeus_token():
 
 def search_lowest_fare_amadeus(origin, destination, departure_date, return_date):
     """
-    Search lowest roundtrip fare using Amadeus.
-
-    origin/destination: IATA codes
-    dates: YYYY-MM-DD
+    Safe Amadeus wrapper that NEVER throws Flask errors.
     """
+
+    # Step 1 — Try token request
     try:
         token = get_amadeus_token()
     except Exception as e:
-        return {"Origin": origin, "Destination": destination, "Error": f"Auth error: {e}"}
+        return {
+            "Origin": origin,
+            "Destination": destination,
+            "Error": f"Auth failed: {str(e)}"
+        }
 
-    params = {
-        "originLocationCode": origin,
-        "destinationLocationCode": destination,
-        "departureDate": departure_date,
-        "returnDate": return_date,
-        "adults": 1,
-        "currencyCode": "USD",
-        "max": 1,
-    }
-    headers = {"Authorization": f"Bearer {token}"}
-
+    # Step 2 — Try fare search
     try:
+        params = {
+            "originLocationCode": origin,
+            "destinationLocationCode": destination,
+            "departureDate": departure_date,
+            "returnDate": return_date,
+            "adults": 1,
+            "currencyCode": "USD",
+            "max": 1
+        }
+
+        headers = {"Authorization": f"Bearer {token}"}
+
         resp = requests.get(
             AMADEUS_FLIGHT_OFFERS_URL,
             headers=headers,
             params=params,
-            timeout=30,
+            timeout=30
         )
+
         if resp.status_code != 200:
             return {
                 "Origin": origin,
                 "Destination": destination,
-                "Error": f"API error {resp.status_code}",
+                "Error": f"API error {resp.status_code} - {resp.text[:200]}"
             }
 
         data = resp.json()
+
         offers = data.get("data", [])
         if not offers:
             return {
                 "Origin": origin,
                 "Destination": destination,
-                "Error": "No fares found",
+                "Error": "No fares found"
             }
 
-        offer = offers[0]
-        price_info = offer.get("price", {})
-        total = price_info.get("grandTotal")
-        currency = price_info.get("currency", "USD")
-
+        price = offers[0].get("price", {})
         return {
             "Origin": origin,
             "Destination": destination,
-            "DepartureDate": departure_date,
-            "ReturnDate": return_date,
-            "Price": total,
-            "Currency": currency,
-            "Error": "",
+            "Price": price.get("grandTotal"),
+            "Currency": price.get("currency", "USD"),
+            "Error": ""
         }
 
     except Exception as e:
         return {
             "Origin": origin,
             "Destination": destination,
-            "Error": f"Request error: {e}",
+            "Error": f"Request failed: {str(e)}"
         }
+
 
 
 # ================================
