@@ -387,7 +387,11 @@ def download_excel():
 def flight_analysis():
     global last_analysis_results
 
-    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
+    company = (
+        request.args.get("company")
+        or request.form.get("company")
+        or ""
+    ).strip().lower()
 
     if not is_company_allowed(company):
         flash("Access denied.")
@@ -396,76 +400,59 @@ def flight_analysis():
     analysis_results = None
 
     if request.method == "POST":
-        # Collect up to 10 origins
-        origins = []
-        for i in range(1, 11):
-            val = request.form.get(f"origin{i}", "").strip().upper()
-            if val:
-                origins.append(val)
 
-        # Collect up to 3 destinations
-        destinations = []
-        for j in range(1, 4):
-            val = request.form.get(f"dest{j}", "").strip().upper()
-            if val:
-                destinations.append(val)
+        # OPTION 1 FIX — Use getlist() to match your HTML field names
+        origins = [
+            o.strip().upper()
+            for o in request.form.getlist("origins")
+            if o.strip()
+        ]
+
+        destinations = [
+            d.strip().upper()
+            for d in request.form.getlist("destinations")
+            if d.strip()
+        ]
 
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
 
+        # VALIDATION
         if not origins or not destinations:
             flash("Please enter at least one origin and one destination.")
             return render_template("flight_analysis.html", company=company)
 
         if not outbound_date or not return_date:
-            flash("Please enter both outbound and return dates.")
+            flash("Please select outbound and return dates.")
             return render_template("flight_analysis.html", company=company)
 
+        # RUN ANALYSIS — call Amadeus logic
         analysis_results = []
-        for o in origins:
-            for d in destinations:
-                result = search_lowest_fare_amadeus(o, d, outbound_date, return_date)
-                row = {
-                    "Origin": o,
-                    "Destination": d,
+        for origin in origins:
+            for dest in destinations:
+                result = search_lowest_fare_amadeus(
+                    origin,
+                    dest,
+                    outbound_date,
+                    return_date
+                )
+
+                analysis_results.append({
+                    "Origin": origin,
+                    "Destination": dest,
                     "DepartureDate": outbound_date,
                     "ReturnDate": return_date,
                     "Price": result.get("Price"),
                     "Currency": result.get("Currency", "USD"),
-                    "Error": result.get("Error", ""),
-                }
-                analysis_results.append(row)
+                    "Error": result.get("Error", "")
+                })
 
         last_analysis_results = analysis_results
 
     return render_template(
         "flight_analysis.html",
         company=company,
-        analysis_results=analysis_results,
+        analysis_results=analysis_results
     )
 
-
-# ================================
-# DOWNLOAD ANALYSIS RESULTS
-# ================================
-@app.route("/download-analysis")
-def download_analysis_excel():
-    if not last_analysis_results:
-        flash("No analysis results to download.")
-        return redirect(url_for("home"))
-
-    df = pd.DataFrame(last_analysis_results)
-    output = BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
-
-    return send_file(
-        output,
-        download_name="flight_analysis_results.xlsx",
-        as_attachment=True,
-    )
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
 
