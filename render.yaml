@@ -2,12 +2,15 @@ services:
   - type: web
     name: tripmakur
     env: python
-    plan: free
+    plan: starter
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn app:app"
     envVars:
-      - key: API_KEY
-        sync: false
-    autoDeploy: true
-    healthCheckPath: "/"
+      - key: FLASK_SECRET_KEY
+      - key: FLIGHTAPI_KEY
+      - key: AMADEUS_CLIENT_ID
+      - key: AMADEUS_CLIENT_SECRET
+      - key: DEFAULT_TZ
+        value: America/Chicago
+
 
