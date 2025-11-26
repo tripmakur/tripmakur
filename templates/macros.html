@@ -1,0 +1,17 @@
+{% macro status_badge(status) %}
+    {% set s = status|lower %}
+
+    {% if "delayed" in s %}
+        <span class="px-2 py-1 bg-yellow-500 text-white rounded text-sm">{{ status }}</span>
+    {% elif "cancel" in s %}
+        <span class="px-2 py-1 bg-red-600 text-white rounded text-sm">{{ status }}</span>
+    {% elif "depart" in s %}
+        <span class="px-2 py-1 bg-blue-600 text-white rounded text-sm">{{ status }}</span>
+    {% elif "arriv" in s %}
+        <span class="px-2 py-1 bg-green-600 text-white rounded text-sm">{{ status }}</span>
+    {% elif "scheduled" in s %}
+        <span class="px-2 py-1 bg-gray-700 text-white rounded text-sm">{{ status }}</span>
+    {% else %}
+        <span class="px-2 py-1 bg-gray-800 text-white rounded text-sm">{{ status }}</span>
+    {% endif %}
+{% endmacro %}
