@@ -1,6 +1,5 @@
 import os
 import json
-import time
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -19,75 +18,97 @@ ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
 
 def load_allowed_companies():
+    """Load allowed companies from JSON file, all lowercase."""
     if os.path.exists(ALLOWED_COMPANIES_FILE):
         try:
             with open(ALLOWED_COMPANIES_FILE, "r") as f:
                 companies = json.load(f)
-                return [c.strip().lower() for c in companies]
-        except:
+            return [str(c).strip().lower() for c in companies]
+        except Exception:
             return []
     return []
 
 
 ALLOWED_COMPANIES = load_allowed_companies()
-last_results = []
-last_analysis_results = []
+last_results = []            # flight status results
+last_analysis_results = []   # flight analysis results (stubbed)
 
 
 def is_company_allowed(company: str) -> bool:
+    """
+    If ALLOWED_COMPANIES is empty => allow all.
+    Otherwise require company to be in list.
+    """
     if not ALLOWED_COMPANIES:
         return True
-    return company.lower() in ALLOWED_COMPANIES
+    return company and company.lower() in ALLOWED_COMPANIES
 
 
 # ==========================================
 #  FLIGHTAPI.IO — FLIGHT STATUS
 # ==========================================
 
-FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")   # must be set in Render
+FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")  # set this in Render dashboard
 
 
-def clean_date_for_api():
-    """Returns today’s date formatted for FlightAPI.io (YYYYMMDD)."""
-    today = datetime.utcnow() - timedelta(hours=6)  # shift to approx US Central time
-    return today.strftime("%Y%m%d")
+def clean_date_for_api() -> str:
+    """
+    Returns "today" as YYYYMMDD for FlightAPI.io, roughly in US Central Time.
+    Render runs in UTC, so we shift by -6 hours.
+    """
+    now_utc = datetime.utcnow()
+    central_guess = now_utc - timedelta(hours=6)
+    return central_guess.strftime("%Y%m%d")
 
 
 def fetch_status_flightapi(airline: str, flight_number: str) -> dict:
     """
-    Contact FlightAPI.io and return:
+    Call FlightAPI.io for flight status.
+
+    Returns a dict like:
     {
-        "Status": "...",
-        "EstimatedDeparture": "...",
-        "EstimatedArrival": "..."
+        "Status": "Scheduled / Delayed / In Air / Arrived / ...",
+        "EstimatedDeparture": "HH:MM, Mon DD" or None,
+        "EstimatedArrival": "HH:MM, Mon DD" or None
     }
     """
-
     if not FLIGHTAPI_KEY:
-        return {"Status": "API Key Missing", "EstimatedDeparture": None, "EstimatedArrival": None}
+        return {
+            "Status": "API Key Missing",
+            "EstimatedDeparture": None,
+            "EstimatedArrival": None,
+        }
 
-    airline = airline.upper()
+    airline_code = (airline or "").upper().strip()
+    flight_no = str(flight_number).strip()
     date_str = clean_date_for_api()
 
     url = (
         f"https://api.flightapi.io/airline/{FLIGHTAPI_KEY}"
-        f"?num={flight_number}&name={airline}&date={date_str}"
+        f"?num={flight_no}&name={airline_code}&date={date_str}"
     )
 
     try:
         resp = requests.get(url, timeout=20)
         if resp.status_code != 200:
-            return {"Status": f"API Error {resp.status_code}", "EstimatedDeparture": None, "EstimatedArrival": None}
+            return {
+                "Status": f"API Error {resp.status_code}",
+                "EstimatedDeparture": None,
+                "EstimatedArrival": None,
+            }
 
         data = resp.json()
 
-        # Case 1: Simple list response
+        # Case 1: list style (departure, arrival, status, etc.)
         if isinstance(data, list):
             status = None
-            est_dep, est_arr = None, None
+            est_dep = None
+            est_arr = None
             for block in data:
+                if not isinstance(block, dict):
+                    continue
                 if "status" in block:
-                    status = block["status"]
+                    status = block.get("status")
                 if "departure" in block:
                     est_dep = block["departure"].get("estimatedTime")
                 if "arrival" in block:
@@ -98,112 +119,37 @@ def fetch_status_flightapi(airline: str, flight_number: str) -> dict:
                 "EstimatedArrival": est_arr,
             }
 
-        # Case 2: flights dict
+        # Case 2: dict with "flights"
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
             if not flights:
-                return {"Status": "Not Found", "EstimatedDeparture": None, "EstimatedArrival": None}
-
+                return {
+                    "Status": "Not Found",
+                    "EstimatedDeparture": None,
+                    "EstimatedArrival": None,
+                }
             first = flights[0]
             status = first.get("displayStatus") or first.get("status") or "Unknown"
-
             est_dep = first.get("departureTime")
             est_arr = first.get("arrivalTime")
-
             return {
                 "Status": status,
                 "EstimatedDeparture": est_dep,
                 "EstimatedArrival": est_arr,
             }
 
-        return {"Status": "Not Found", "EstimatedDeparture": None, "EstimatedArrival": None}
+        return {
+            "Status": "Not Found",
+            "EstimatedDeparture": None,
+            "EstimatedArrival": None,
+        }
 
     except Exception as e:
-        return {"Status": f"Error: {str(e)}", "EstimatedDeparture": None, "EstimatedArrival": None}
-
-
-# ==========================================
-#  AMADEUS — FLIGHT ANALYSIS
-# ==========================================
-
-AMADEUS_CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID")
-AMADEUS_CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET")
-
-AMADEUS_AUTH_URL = "https://test.api.amadeus.com/v1/security/oauth2/token"
-AMADEUS_FLIGHT_OFFERS_URL = "https://test.api.amadeus.com/v2/shopping/flight-offers"
-
-amadeus_token = None
-amadeus_token_expiry = 0
-
-
-def get_amadeus_token():
-    """Fetch or refresh OAuth token securely."""
-    global amadeus_token, amadeus_token_expiry
-
-    if not AMADEUS_CLIENT_ID or not AMADEUS_CLIENT_SECRET:
-        raise RuntimeError("Amadeus API credentials missing")
-
-    now = time.time()
-    if amadeus_token and now < amadeus_token_expiry:
-        return amadeus_token
-
-    data = {
-        "grant_type": "client_credentials",
-        "client_id": AMADEUS_CLIENT_ID,
-        "client_secret": AMADEUS_CLIENT_SECRET,
-    }
-
-    resp = requests.post(AMADEUS_AUTH_URL, data=data, timeout=20)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Amadeus auth failed: {resp.text}")
-
-    payload = resp.json()
-    amadeus_token = payload.get("access_token")
-    amadeus_token_expiry = now + payload.get("expires_in", 1800) - 60
-
-    return amadeus_token
-
-
-def search_lowest_fare_amadeus(origin, destination, depart_date, return_date):
-    """Return lowest fare for (origin → destination)."""
-    try:
-        token = get_amadeus_token()
-    except Exception as e:
-        return {"Error": f"Auth error: {e}"}
-
-    params = {
-        "originLocationCode": origin,
-        "destinationLocationCode": destination,
-        "departureDate": depart_date,
-        "returnDate": return_date,
-        "adults": 1,
-        "currencyCode": "USD",
-        "max": 1,
-    }
-
-    resp = requests.get(
-        AMADEUS_FLIGHT_OFFERS_URL,
-        headers={"Authorization": f"Bearer {token}"},
-        params=params,
-        timeout=20,
-    )
-
-    if resp.status_code != 200:
-        return {"Error": f"API error {resp.status_code}"}
-
-    data = resp.json().get("data", [])
-    if not data:
-        return {"Error": "No fares found"}
-
-    offer = data[0]
-    price = offer.get("price", {}).get("grandTotal")
-    currency = offer.get("price", {}).get("currency", "USD")
-
-    return {
-        "Price": price,
-        "Currency": currency,
-        "Error": "",
-    }
+        return {
+            "Status": f"Error: {str(e)}",
+            "EstimatedDeparture": None,
+            "EstimatedArrival": None,
+        }
 
 
 # ==========================================
@@ -214,10 +160,17 @@ def search_lowest_fare_amadeus(origin, destination, depart_date, return_date):
 def home():
     if request.method == "POST":
         company = request.form.get("company", "").strip().lower()
-        if not is_company_allowed(company):
-            flash("Access denied.")
+
+        if not company:
+            flash("Please enter a company name.")
             return render_template("index.html")
+
+        if not is_company_allowed(company):
+            flash(f"Access denied for company: {company}")
+            return render_template("index.html")
+
         return redirect(url_for("flight_status", company=company))
+
     return render_template("index.html")
 
 
@@ -229,28 +182,40 @@ def home():
 def flight_status():
     global last_results
 
-    company = (request.args.get("company") or request.form.get("company") or "").lower()
+    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
 
     if not is_company_allowed(company):
         flash("Access denied.")
         return redirect(url_for("home"))
 
     flight_info = None
+    uploaded_results = None
 
     if request.method == "POST":
-        airline = request.form.get("airline", "").upper()
+        airline = request.form.get("airline", "").strip().upper()
         flight_number = request.form.get("flight_number", "").strip()
-        departure = request.form.get("departure", "").upper()
-        arrival = request.form.get("arrival", "").upper()
+        departure = request.form.get("departure", "").strip().upper()
+        arrival = request.form.get("arrival", "").strip().upper()
 
-        result = fetch_status_flightapi(airline, flight_number)
+        if not all([airline, flight_number, departure, arrival]):
+            flash("All fields are required.")
+            return render_template(
+                "flight_status.html",
+                company=company,
+                flight_info=None,
+                uploaded_results=None,
+            )
+
+        status_data = fetch_status_flightapi(airline, flight_number)
 
         flight_info = {
             "Airline": airline,
             "FlightNumber": flight_number,
             "From": departure,
             "To": arrival,
-            **result,
+            "Status": status_data.get("Status"),
+            "EstimatedDeparture": status_data.get("EstimatedDeparture"),
+            "EstimatedArrival": status_data.get("EstimatedArrival"),
         }
 
         last_results = [flight_info]
@@ -259,58 +224,75 @@ def flight_status():
         "flight_status.html",
         company=company,
         flight_info=flight_info,
+        uploaded_results=uploaded_results,
     )
 
 
 # ==========================================
-#  EXCEL UPLOAD
+#  EXCEL UPLOAD (STATUS)
 # ==========================================
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
     global last_results
 
-    company = (request.args.get("company") or request.form.get("company") or "").lower()
+    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
     if not is_company_allowed(company):
         flash("Access denied.")
         return redirect(url_for("home"))
 
-    file = request.files.get("file")
-    if not file:
+    if "file" not in request.files:
         flash("No file uploaded.")
         return redirect(url_for("flight_status", company=company))
 
+    file = request.files["file"]
+    if not file.filename:
+        flash("No selected file.")
+        return redirect(url_for("flight_status", company=company))
+
     try:
-        df = pd.read_excel(file) if file.filename.endswith(".xlsx") else pd.read_csv(file)
-        df.columns = df.columns.str.lower()
+        # Read Excel or CSV
+        if file.filename.lower().endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file, sheet_name=0)
+
+        # Normalize columns
+        df.columns = df.columns.str.strip().str.lower()
 
         required = ["airline", "flightnumber", "departure", "arrival"]
-        if any(col not in df.columns for col in required):
-            flash("Missing required columns.")
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            flash(f"Missing required columns: {missing}")
             return redirect(url_for("flight_status", company=company))
 
         results = []
         for _, row in df.iterrows():
-            airline = str(row["airline"]).upper()
-            flight_number = str(row["flightnumber"])
-            departure = str(row["departure"]).upper()
-            arrival = str(row["arrival"]).upper()
+            airline = str(row["airline"]).strip().upper()
+            flight_number = str(row["flightnumber"]).strip()
+            dep = str(row["departure"]).strip().upper()
+            arr = str(row["arrival"]).strip().upper()
 
-            result = fetch_status_flightapi(airline, flight_number)
+            status_data = fetch_status_flightapi(airline, flight_number)
 
-            results.append({
-                "Airline": airline,
-                "FlightNumber": flight_number,
-                "From": departure,
-                "To": arrival,
-                **result,
-            })
+            results.append(
+                {
+                    "Airline": airline,
+                    "FlightNumber": flight_number,
+                    "From": dep,
+                    "To": arr,
+                    "Status": status_data.get("Status"),
+                    "EstimatedDeparture": status_data.get("EstimatedDeparture"),
+                    "EstimatedArrival": status_data.get("EstimatedArrival"),
+                }
+            )
 
         last_results = results
 
         return render_template(
             "flight_status.html",
             company=company,
+            flight_info=None,
             uploaded_results=results,
         )
 
@@ -320,28 +302,42 @@ def upload_file():
 
 
 # ==========================================
-#  DOWNLOAD STATUS
+#  DOWNLOAD STATUS RESULTS
 # ==========================================
 
 @app.route("/download")
 def download_excel():
+    if not last_results:
+        flash("No results to download.")
+        return redirect(url_for("home"))
+
     df = pd.DataFrame(last_results)
     out = BytesIO()
     df.to_excel(out, index=False)
     out.seek(0)
-    return send_file(out, download_name="flight_status.xlsx", as_attachment=True)
+
+    return send_file(
+        out,
+        download_name="flight_status_results.xlsx",
+        as_attachment=True,
+    )
 
 
 # ==========================================
-#  FLIGHT ANALYSIS PAGE
+#  FLIGHT ANALYSIS (STUB — AMADEUS DISABLED)
 # ==========================================
 
 @app.route("/flight-analysis", methods=["GET", "POST"])
 def flight_analysis():
+    """
+    Flight Analysis page is kept, but Amadeus is DISABLED.
+
+    The form still works, and we return stubbed rows with an Error
+    message instead of calling the Amadeus API.
+    """
     global last_analysis_results
 
-    company = (request.args.get("company") or request.form.get("company") or "").lower()
-
+    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
     if not is_company_allowed(company):
         flash("Access denied.")
         return redirect(url_for("home"))
@@ -349,30 +345,35 @@ def flight_analysis():
     analysis_results = None
 
     if request.method == "POST":
-        origins = [o.upper() for o in request.form.getlist("origins") if o.strip()]
-        dests = [d.upper() for d in request.form.getlist("destinations") if d.strip()]
+        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
+        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
+        outbound_date = request.form.get("outbound_date", "").strip()
+        return_date = request.form.get("return_date", "").strip()
 
-        depart_date = request.form.get("outbound_date", "")
-        return_date = request.form.get("return_date", "")
+        if not origins or not destinations:
+            flash("Please enter at least one origin and one destination.")
+            return render_template("flight_analysis.html", company=company, analysis_results=None)
 
-        if not origins or not dests:
-            flash("Enter at least one origin and one destination.")
-            return render_template("flight_analysis.html", company=company)
+        if not outbound_date or not return_date:
+            flash("Please select outbound and return dates.")
+            return render_template("flight_analysis.html", company=company, analysis_results=None)
 
-        analysis = []
+        # STUB: Do NOT call Amadeus, just return "API disabled"
+        results = []
         for o in origins:
-            for d in dests:
-                result = search_lowest_fare_amadeus(o, d, depart_date, return_date)
-                analysis.append({
-                    "Origin": o,
-                    "Destination": d,
-                    "Price": result.get("Price"),
-                    "Currency": result.get("Currency"),
-                    "Error": result.get("Error"),
-                })
+            for d in destinations:
+                results.append(
+                    {
+                        "Origin": o,
+                        "Destination": d,
+                        "Price": None,
+                        "Currency": "USD",
+                        "Error": "Flight analysis API is currently disabled.",
+                    }
+                )
 
-        last_analysis_results = analysis
-        analysis_results = analysis
+        last_analysis_results = results
+        analysis_results = results
 
     return render_template(
         "flight_analysis.html",
@@ -382,22 +383,39 @@ def flight_analysis():
 
 
 # ==========================================
-#  DOWNLOAD ANALYSIS
+#  DOWNLOAD ANALYSIS RESULTS
 # ==========================================
 
 @app.route("/download-analysis")
 def download_analysis_excel():
+    if not last_analysis_results:
+        flash("No analysis results to download.")
+        return redirect(url_for("home"))
+
     df = pd.DataFrame(last_analysis_results)
     out = BytesIO()
     df.to_excel(out, index=False)
     out.seek(0)
-    return send_file(out, download_name="flight_analysis.xlsx", as_attachment=True)
+
+    return send_file(
+        out,
+        download_name="flight_analysis_results.xlsx",
+        as_attachment=True,
+    )
 
 
 # ==========================================
-#  RUN
+#  HEALTH CHECK (for Render)
+# ==========================================
+
+@app.route("/health")
+def health():
+    return "OK", 200
+
+
+# ==========================================
+#  LOCAL RUN
 # ==========================================
 
 if __name__ == "__main__":
     app.run(debug=True)
-
