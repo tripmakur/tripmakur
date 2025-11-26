@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
 {% block content %}
 
 <h1 class="text-3xl font-bold mb-6 text-gray-800">Flight Status Lookup</h1>
@@ -43,7 +44,8 @@
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-semibold mb-4">Upload Excel</h2>
 
-    <form method="POST" enctype="multipart/form-data" action="{{ url_for('upload_file', company=company) }}">
+    <form method="POST" enctype="multipart/form-data"
+          action="{{ url_for('upload_file', company=company) }}">
         <input type="file" name="file" required class="mb-3">
 
         <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
@@ -52,7 +54,7 @@
     </form>
 </div>
 
-<!-- SINGLE RESULT -->
+<!-- RESULT FOR MANUAL LOOKUP -->
 {% if flight_info %}
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-semibold mb-3">Result</h2>
@@ -62,21 +64,19 @@
         <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
         <li><strong>From:</strong> {{ flight_info.From }}</li>
         <li><strong>To:</strong> {{ flight_info.To }}</li>
+        <li><strong>Status:</strong> {{ status_badge(flight_info.Status) }}</li>
 
-        <li>
-            <strong>Status:</strong>
-            {% include "status_badge.html" with status=flight_info.Status %}
-        </li>
-
-        {% if flight_info.Status == "Delayed" %}
+        {% if flight_info.EstimatedDeparture %}
             <li><strong>Estimated Departure:</strong> {{ flight_info.EstimatedDeparture }}</li>
+        {% endif %}
+        {% if flight_info.EstimatedArrival %}
             <li><strong>Estimated Arrival:</strong> {{ flight_info.EstimatedArrival }}</li>
         {% endif %}
     </ul>
 </div>
 {% endif %}
 
-<!-- UPLOADED RESULTS TABLE -->
+<!-- RESULTS FOR UPLOAD -->
 {% if uploaded_results %}
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-semibold mb-4">Uploaded Flight Results</h2>
@@ -95,28 +95,15 @@
         </thead>
         <tbody>
             {% for row in uploaded_results %}
-                <tr>
-                    <td class="p-2 border">{{ row.Airline }}</td>
-                    <td class="p-2 border">{{ row.FlightNumber }}</td>
-                    <td class="p-2 border">{{ row.From }}</td>
-                    <td class="p-2 border">{{ row.To }}</td>
-
-                    <td class="p-2 border">
-                        {% include "status_badge.html" with status=row.Status %}
-                    </td>
-
-                    <td class="p-2 border">
-                        {% if row.Status == "Delayed" %}
-                            {{ row.EstimatedDeparture }}
-                        {% else %} — {% endif %}
-                    </td>
-
-                    <td class="p-2 border">
-                        {% if row.Status == "Delayed" %}
-                            {{ row.EstimatedArrival }}
-                        {% else %} — {% endif %}
-                    </td>
-                </tr>
+            <tr class="bg-white hover:bg-gray-50">
+                <td class="p-2 border">{{ row.Airline }}</td>
+                <td class="p-2 border">{{ row.FlightNumber }}</td>
+                <td class="p-2 border">{{ row.From }}</td>
+                <td class="p-2 border">{{ row.To }}</td>
+                <td class="p-2 border">{{ status_badge(row.Status) }}</td>
+                <td class="p-2 border">{{ row.EstimatedDeparture or "—" }}</td>
+                <td class="p-2 border">{{ row.EstimatedArrival or "—" }}</td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
@@ -129,6 +116,7 @@
 {% endif %}
 
 {% endblock %}
+
 
 
 
