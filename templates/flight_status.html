@@ -12,22 +12,22 @@
 
         <div>
             <label class="font-semibold">Airline Code:</label>
-            <input type="text" name="airline" class="border p-2 rounded w-full" required>
+            <input type="text" name="airline" required class="border p-2 rounded w-full">
         </div>
 
         <div>
             <label class="font-semibold">Flight Number:</label>
-            <input type="text" name="flight_number" class="border p-2 rounded w-full" required>
+            <input type="text" name="flight_number" required class="border p-2 rounded w-full">
         </div>
 
         <div>
             <label class="font-semibold">From Airport:</label>
-            <input type="text" name="departure" class="border p-2 rounded w-full" required>
+            <input type="text" name="departure" required class="border p-2 rounded w-full">
         </div>
 
         <div>
             <label class="font-semibold">To Airport:</label>
-            <input type="text" name="arrival" class="border p-2 rounded w-full" required>
+            <input type="text" name="arrival" required class="border p-2 rounded w-full">
         </div>
 
         <div class="col-span-2">
@@ -50,46 +50,33 @@
             Upload & Check
         </button>
     </form>
-
-    <p class="mt-3 text-gray-600 text-sm">
-        Excel or CSV must contain columns: <strong>Airline, FlightNumber, Departure, Arrival</strong>
-    </p>
 </div>
 
-<!-- MANUAL RESULT -->
+<!-- SINGLE RESULT -->
 {% if flight_info %}
 <div class="bg-white p-6 shadow rounded mb-8">
-    <h2 class="text-xl font-semibold mb-3">Flight Result</h2>
+    <h2 class="text-xl font-semibold mb-3">Result</h2>
 
-    <table class="w-full border-collapse">
-        <thead class="bg-gray-200">
-            <tr>
-                <th class="border p-2">Airline</th>
-                <th class="border p-2">Flight</th>
-                <th class="border p-2">From</th>
-                <th class="border p-2">To</th>
-                <th class="border p-2">Status</th>
-                <th class="border p-2">Est. Departure</th>
-                <th class="border p-2">Est. Arrival</th>
-            </tr>
-        </thead>
+    <ul class="text-gray-700">
+        <li><strong>Airline:</strong> {{ flight_info.Airline }}</li>
+        <li><strong>Flight Number:</strong> {{ flight_info.FlightNumber }}</li>
+        <li><strong>From:</strong> {{ flight_info.From }}</li>
+        <li><strong>To:</strong> {{ flight_info.To }}</li>
 
-        <tbody>
-            <tr>
-                <td class="border p-2">{{ flight_info.Airline }}</td>
-                <td class="border p-2">{{ flight_info.FlightNumber }}</td>
-                <td class="border p-2">{{ flight_info.From }}</td>
-                <td class="border p-2">{{ flight_info.To }}</td>
-                <td class="border p-2">{{ flight_info.Status }}</td>
-                <td class="border p-2">{{ flight_info.EstimatedDeparture or "—" }}</td>
-                <td class="border p-2">{{ flight_info.EstimatedArrival or "—" }}</td>
-            </tr>
-        </tbody>
-    </table>
+        <li>
+            <strong>Status:</strong>
+            {% include "status_badge.html" with status=flight_info.Status %}
+        </li>
+
+        {% if flight_info.Status == "Delayed" %}
+            <li><strong>Estimated Departure:</strong> {{ flight_info.EstimatedDeparture }}</li>
+            <li><strong>Estimated Arrival:</strong> {{ flight_info.EstimatedArrival }}</li>
+        {% endif %}
+    </ul>
 </div>
 {% endif %}
 
-<!-- UPLOADED RESULTS -->
+<!-- UPLOADED RESULTS TABLE -->
 {% if uploaded_results %}
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-semibold mb-4">Uploaded Flight Results</h2>
@@ -97,27 +84,39 @@
     <table class="w-full border-collapse">
         <thead class="bg-gray-200">
             <tr>
-                <th class="border p-2">Airline</th>
-                <th class="border p-2">Flight</th>
-                <th class="border p-2">From</th>
-                <th class="border p-2">To</th>
-                <th class="border p-2">Status</th>
-                <th class="border p-2">Est. Departure</th>
-                <th class="border p-2">Est. Arrival</th>
+                <th class="p-2 border">Airline</th>
+                <th class="p-2 border">Flight</th>
+                <th class="p-2 border">From</th>
+                <th class="p-2 border">To</th>
+                <th class="p-2 border">Status</th>
+                <th class="p-2 border">Est. Departure</th>
+                <th class="p-2 border">Est. Arrival</th>
             </tr>
         </thead>
-
         <tbody>
             {% for row in uploaded_results %}
-            <tr>
-                <td class="border p-2">{{ row.Airline }}</td>
-                <td class="border p-2">{{ row.FlightNumber }}</td>
-                <td class="border p-2">{{ row.From }}</td>
-                <td class="border p-2">{{ row.To }}</td>
-                <td class="border p-2">{{ row.Status }}</td>
-                <td class="border p-2">{{ row.EstimatedDeparture or "—" }}</td>
-                <td class="border p-2">{{ row.EstimatedArrival or "—" }}</td>
-            </tr>
+                <tr>
+                    <td class="p-2 border">{{ row.Airline }}</td>
+                    <td class="p-2 border">{{ row.FlightNumber }}</td>
+                    <td class="p-2 border">{{ row.From }}</td>
+                    <td class="p-2 border">{{ row.To }}</td>
+
+                    <td class="p-2 border">
+                        {% include "status_badge.html" with status=row.Status %}
+                    </td>
+
+                    <td class="p-2 border">
+                        {% if row.Status == "Delayed" %}
+                            {{ row.EstimatedDeparture }}
+                        {% else %} — {% endif %}
+                    </td>
+
+                    <td class="p-2 border">
+                        {% if row.Status == "Delayed" %}
+                            {{ row.EstimatedArrival }}
+                        {% else %} — {% endif %}
+                    </td>
+                </tr>
             {% endfor %}
         </tbody>
     </table>
@@ -130,6 +129,7 @@
 {% endif %}
 
 {% endblock %}
+
 
 
 
