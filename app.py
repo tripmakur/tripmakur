@@ -301,7 +301,6 @@ def flight_status():
 # ====================================================
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    """Upload Excel/CSV and check status."""
     global last_results
 
     company = request.args.get("company", "").strip().lower()
@@ -315,8 +314,12 @@ def upload_file():
         return redirect(url_for("flight_status", company=company))
 
     file = request.files["file"]
+    if not file.filename:
+        flash("No selected file.")
+        return redirect(url_for("flight_status", company=company))
 
     try:
+        # read CSV or Excel
         if file.filename.lower().endswith(".csv"):
             df = pd.read_csv(file)
         else:
@@ -325,9 +328,9 @@ def upload_file():
         df.columns = df.columns.str.lower().str.strip()
 
         required = ["airline", "flightnumber", "departure", "arrival"]
-        for col in required:
-            if col not in df.columns:
-                flash(f"Missing column: {col}")
+        for c in required:
+            if c not in df.columns:
+                flash(f"Missing required column: {c}")
                 return redirect(url_for("flight_status", company=company))
 
         today = datetime.now().astimezone().strftime("%Y-%m-%d")
@@ -341,17 +344,15 @@ def upload_file():
 
             status_data = fetch_status_flightapi(airline, fn, today)
 
-            results.append(
-                {
-                    "Airline": airline,
-                    "FlightNumber": fn,
-                    "From": dep,
-                    "To": arr,
-                    "Status": status_data["Status"],
-                    "EstimatedDeparture": status_data["EstimatedDeparture"],
-                    "EstimatedArrival": status_data["EstimatedArrival"],
-                }
-            )
+            results.append({
+                "Airline": airline,
+                "FlightNumber": fn,
+                "From": dep,
+                "To": arr,
+                "Status": status_data["Status"],
+                "EstimatedDeparture": status_data["EstimatedDeparture"],
+                "EstimatedArrival": status_data["EstimatedArrival"],
+            })
 
         last_results = results
 
@@ -359,12 +360,13 @@ def upload_file():
             "flight_status.html",
             company=company,
             flight_info=None,
-            uploaded_results=results,
+            uploaded_results=results
         )
 
     except Exception as e:
-        flash(f"Error: {e}")
+        flash(f"Error processing file: {e}")
         return redirect(url_for("flight_status", company=company))
+
 
 
 # ====================================================
