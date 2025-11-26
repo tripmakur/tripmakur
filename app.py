@@ -48,15 +48,20 @@ def is_company_allowed(company: str) -> bool:
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY", "69175603253bb1627f7ea9cc")
 
 
-def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -> str:
+def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str):
     """
-    Fetch a flight's status from FlightAPI.io.
+    Fetch a flight’s status and estimated times from FlightAPI.io.
 
-    Handles:
-    - list-style response: [ {departure...}, {arrival...}, {status: "..."} ]
-    - dict with "flights": [...]
+    Supports:
+    - airline codes in ANY format (DL, dl, Dl, dL)
+    - list-style API responses
+    - dict responses containing "flights"
+    - estimated times for delayed flights
     """
-    airline_code = airline.upper()
+
+    # Always convert airline code to uppercase to avoid failures
+    airline_code = airline.strip().upper()
+    flight_number = str(flight_number).strip()
     date_str = flight_date.replace("-", "")
 
     url = (
@@ -66,26 +71,70 @@ def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -
 
     try:
         resp = requests.get(url, timeout=20)
+
         if resp.status_code != 200:
-            return f"API Error ({resp.status_code})"
+            return {
+                "Status": f"API Error ({resp.status_code})",
+                "EstimatedDeparture": "-",
+                "EstimatedArrival": "-",
+            }
 
         data = resp.json()
 
-        # Case 1: simple list with a status object
+        # ----------------------------------------------
+        # CASE 1 — API returns simple list structure
+        # ----------------------------------------------
         if isinstance(data, list):
-            for block in data:
-                if isinstance(block, dict) and "status" in block:
-                    return block.get("status") or "Unknown"
-            return "Not Found"
+            status = "Unknown"
+            est_dep = "-"
+            est_arr = "-"
 
-        # Case 2: dict with 'flights'
+            for block in data:
+
+                # Extract status
+                if "status" in block:
+                    status = block.get("status", "Unknown")
+
+                # Extract departure estimated times
+                if "departure" in block:
+                    est_dep = (
+                        block["departure"].get("estimatedTime")
+                        or block["departure"].get("scheduledTime")
+                        or "-"
+                    )
+
+                # Extract arrival estimated times
+                if "arrival" in block:
+                    est_arr = (
+                        block["arrival"].get("estimatedTime")
+                        or block["arrival"].get("scheduledTime")
+                        or "-"
+                    )
+
+            return {
+                "Status": status,
+                "EstimatedDeparture": est_dep,
+                "EstimatedArrival": est_arr,
+            }
+
+        # ----------------------------------------------
+        # CASE 2 — API returns: {"flights": [...]}
+        # ----------------------------------------------
         if isinstance(data, dict) and "flights" in data:
             flights = data.get("flights") or []
+
             if not flights:
-                return "Not Found"
-            first = flights[0]
-            status = first.get("displayStatus") or first.get("status")
-            if isinstance(status, int):
+                return {
+                    "Status": "Not Found",
+                    "EstimatedDeparture": "-",
+                    "EstimatedArrival": "-",
+                }
+
+            f = flights[0]
+
+            # Convert numeric status codes
+            raw_status = f.get("displayStatus") or f.get("status")
+            if isinstance(raw_status, int):
                 status_map = {
                     1: "Scheduled",
                     2: "Arrived",
@@ -93,13 +142,36 @@ def fetch_status_flightapi(airline: str, flight_number: str, flight_date: str) -
                     4: "Delayed",
                     5: "Cancelled",
                 }
-                return status_map.get(status, "Unknown")
-            return status or "Unknown"
+                status = status_map.get(raw_status, "Unknown")
+            else:
+                status = raw_status or "Unknown"
 
-        return "Not Found"
+            # Get estimated/scheduled times safely
+            est_dep = f.get("estimatedDepartureTime") or f.get("departureTime") or "-"
+            est_arr = f.get("estimatedArrivalTime") or f.get("arrivalTime") or "-"
+
+            return {
+                "Status": status,
+                "EstimatedDeparture": est_dep,
+                "EstimatedArrival": est_arr,
+            }
+
+        # ----------------------------------------------
+        # FALLBACK CASE
+        # ----------------------------------------------
+        return {
+            "Status": "Not Found",
+            "EstimatedDeparture": "-",
+            "EstimatedArrival": "-",
+        }
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        return {
+            "Status": f"Error: {str(e)}",
+            "EstimatedDeparture": "-",
+            "EstimatedArrival": "-",
+        }
+
 
 
 # ================================
