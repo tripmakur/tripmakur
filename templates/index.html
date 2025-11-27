@@ -1,25 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h1 class="text-3xl font-bold text-gray-800 mb-6">Authorized Company Access</h1>
+<h1 class="text-3xl font-bold mb-6">Authorized Company Access</h1>
 
-<p class="text-gray-600 mb-4">Enter your company name to access the flight tools.</p>
-
-<form method="POST" class="space-y-4 max-w-md">
-
-    <div>
-        <label class="font-semibold">Company Name:</label>
-        <input type="text" name="company" required
-               class="border p-2 rounded w-full" />
-    </div>
+<form method="POST" class="bg-white p-6 shadow rounded w-full md:w-1/2">
+    <label class="font-semibold">Company Name:</label>
+    <input type="text" name="company" class="border p-2 rounded w-full mb-4" required>
 
     <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
         Continue
     </button>
-
 </form>
 
 {% endblock %}
+
 
 
 
