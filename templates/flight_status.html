@@ -40,12 +40,12 @@
     </form>
 </div>
 
-<!-- EXCEL UPLOAD -->
+<!-- EXCEL UPLOAD — FIXED ROUTE -->
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-semibold mb-4">Upload Excel</h2>
 
     <form method="POST" enctype="multipart/form-data"
-          action="{{ url_for('flight_status', company=company) }}">
+          action="{{ url_for('upload_file', company=company) }}">
         <input type="file" name="file" required class="mb-4">
         <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
             Upload & Check Status
@@ -53,7 +53,7 @@
     </form>
 </div>
 
-<!-- SINGLE FLIGHT RESULT -->
+<!-- SINGLE RESULT -->
 {% if flight_info %}
 <div class="bg-white p-6 shadow rounded mb-8">
     <h2 class="text-xl font-bold mb-3">Flight Result</h2>
@@ -62,11 +62,14 @@
         <tr><th class="p-2 border">Airline</th><td class="p-2 border">{{ flight_info.Airline }}</td></tr>
         <tr><th class="p-2 border">Flight</th><td class="p-2 border">{{ flight_info.FlightNumber }}</td></tr>
         <tr><th class="p-2 border">Route</th><td class="p-2 border">{{ flight_info.From }} → {{ flight_info.To }}</td></tr>
-        <tr><th class="p-2 border">Status</th><td class="p-2 border">{{ status_badge(flight_info.Status) }}</td></tr>
+
+        <tr><th class="p-2 border">Status</th>
+            <td class="p-2 border">{{ status_badge(flight_info.Status) }}</td>
+        </tr>
 
         {% if "delayed" in flight_info.Status.lower() %}
-            <tr><th class="p-2 border">Est. Departure</th><td class="p-2 border">{{ flight_info.EstimatedDeparture }}</td></tr>
-            <tr><th class="p-2 border">Est. Arrival</th><td class="p-2 border">{{ flight_info.EstimatedArrival }}</td></tr>
+        <tr><th class="p-2 border">Est. Departure</th><td class="p-2 border">{{ flight_info.EstimatedDeparture }}</td></tr>
+        <tr><th class="p-2 border">Est. Arrival</th><td class="p-2 border">{{ flight_info.EstimatedArrival }}</td></tr>
         {% endif %}
     </table>
 </div>
@@ -109,6 +112,11 @@
             {% endfor %}
         </tbody>
     </table>
+
+    <a href="{{ url_for('download_excel') }}"
+       class="inline-block mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Download Excel
+    </a>
 </div>
 {% endif %}
 
