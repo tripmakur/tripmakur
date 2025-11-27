@@ -1,34 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="max-w-md mx-auto bg-white shadow rounded p-6 mt-8">
-    <h1 class="text-2xl font-bold mb-4 text-gray-800">Authorized Company Access</h1>
-    <p class="mb-4 text-gray-600">
-        Enter your company name to access the flight tools.
-    </p>
+<h1 class="text-3xl font-bold text-gray-800 mb-6">Authorized Company Access</h1>
 
-    <form method="POST" action="{{ url_for('home') }}" class="space-y-4">
-        <div>
-            <label class="block font-semibold mb-1">Company Name</label>
-            <input
-                type="text"
-                name="company"
-                class="border p-2 rounded w-full"
-                placeholder="e.g. bruce"
-                required
-            />
-        </div>
+<p class="text-gray-600 mb-4">Enter your company name to access the flight tools.</p>
 
-        <button
-            type="submit"
-            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full"
-        >
-            Check Flight Status
-        </button>
-    </form>
-</div>
+<form method="POST" class="space-y-4 max-w-md">
+
+    <div>
+        <label class="font-semibold">Company Name:</label>
+        <input type="text" name="company" required
+               class="border p-2 rounded w-full" />
+    </div>
+
+    <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Continue
+    </button>
+
+</form>
 
 {% endblock %}
+
 
 
 
