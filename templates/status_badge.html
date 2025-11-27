@@ -1,23 +1,23 @@
 {% macro status_badge(status) %}
     {% set s = status.lower() %}
 
-    {% if "delayed" in s %}
-        <span class="px-2 py-1 bg-yellow-500 text-white rounded text-sm">Delayed</span>
+    {% if "scheduled" in s %}
+        <span class="px-3 py-1 rounded bg-blue-200 text-blue-800 font-semibold">Scheduled</span>
+
+    {% elif "departed" in s %}
+        <span class="px-3 py-1 rounded bg-yellow-200 text-yellow-800 font-semibold">Departed</span>
+
+    {% elif "arrived" in s %}
+        <span class="px-3 py-1 rounded bg-green-200 text-green-800 font-semibold">Arrived</span>
+
+    {% elif "delayed" in s %}
+        <span class="px-3 py-1 rounded bg-red-200 text-red-800 font-semibold">Delayed</span>
 
     {% elif "cancel" in s %}
-        <span class="px-2 py-1 bg-red-600 text-white rounded text-sm">Cancelled</span>
-
-    {% elif "depart" in s %}
-        <span class="px-2 py-1 bg-blue-600 text-white rounded text-sm">Departed</span>
-
-    {% elif "arriv" in s %}
-        <span class="px-2 py-1 bg-green-600 text-white rounded text-sm">Arrived</span>
-
-    {% elif "scheduled" in s %}
-        <span class="px-2 py-1 bg-gray-500 text-white rounded text-sm">Scheduled</span>
+        <span class="px-3 py-1 rounded bg-gray-300 text-gray-700 font-semibold">Cancelled</span>
 
     {% else %}
-        <span class="px-2 py-1 bg-gray-400 text-white rounded text-sm">Unknown</span>
+        <span class="px-3 py-1 rounded bg-gray-200 text-gray-700 font-semibold">Unknown</span>
     {% endif %}
 {% endmacro %}
 
