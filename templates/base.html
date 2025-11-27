@@ -1,49 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>TripMakur Tools</title>
-
-    <!-- Tailwind CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
-          rel="stylesheet">
+    <title>TripMakur</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 
 <body class="bg-gray-100">
 
-    <!-- NAVBAR -->
-    <nav class="bg-white shadow mb-6">
-        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+<nav class="bg-white shadow mb-6 p-4">
+    <div class="container mx-auto flex justify-between">
+        <div class="text-xl font-bold text-blue-600">TripMakur</div>
 
-            <div class="text-2xl font-bold text-blue-600">TripMakur</div>
-
-            {% if company %}
-            <div class="space-x-6 text-lg">
-
-                <a href="{{ url_for('flight_status', company=company) }}"
-                   class="hover:text-blue-600 font-semibold">
-                    Flight Status
-                </a>
-
-                <a href="{{ url_for('flight_analysis', company=company) }}"
-                   class="hover:text-blue-600 font-semibold">
-                    Flight Analysis
-                </a>
-
-            </div>
-            {% endif %}
+        {% if company %}
+        <div class="space-x-6 text-lg">
+            <a href="{{ url_for('flight_status', company=company) }}" class="hover:text-blue-600">Flight Status</a>
+            <a href="{{ url_for('flight_analysis', company=company) }}" class="hover:text-blue-600">Flight Analysis</a>
         </div>
-    </nav>
-
-    <!-- MAIN CONTENT -->
-    <div class="container mx-auto px-6 py-6">
-        {% block content %}{% endblock %}
+        {% endif %}
     </div>
+</nav>
+
+<div class="container mx-auto p-6">
+    {% block content %}{% endblock %}
+</div>
 
 </body>
 </html>
+
 
 
 
