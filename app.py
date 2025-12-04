@@ -3,7 +3,6 @@ import json
 import time
 from datetime import datetime
 from io import BytesIO
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -17,16 +16,12 @@ from flask import (
     send_file,
 )
 
-# ------------------------------------------------------------------------------
-# Flask app + secret
-# ------------------------------------------------------------------------------
-
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "your-secret-key")
 
-# ------------------------------------------------------------------------------
-# Allowed companies handling
-# ------------------------------------------------------------------------------
+# ==============================
+# Allowed Companies
+# ==============================
 
 ALLOWED_COMPANIES_FILE = "allowed_companies.json"
 
@@ -44,192 +39,113 @@ def load_allowed_companies():
 
 ALLOWED_COMPANIES = load_allowed_companies()
 
-# For downloads
-last_results = []            # flight status results
-last_analysis_results = []   # flight analysis results
+# in-memory result buffers
+last_results = []            # for flight status -> Download Excel
+last_analysis_results = []   # for flight analysis download
 
 
 def is_company_allowed(company: str) -> bool:
+    """If allowed_companies.json is empty, allow any company."""
     if not ALLOWED_COMPANIES:
-        # If no config file or empty list, allow everyone
         return True
     if not company:
         return False
     return company.lower() in ALLOWED_COMPANIES
 
 
-# ------------------------------------------------------------------------------
-# Helpers: Date in America/Chicago (for FlightAPI date param)
-# ------------------------------------------------------------------------------
-
-def today_central_yyyymmdd() -> str:
-    """Return today's date in America/Chicago as YYYYMMDD."""
-    try:
-        now_central = datetime.now(ZoneInfo("America/Chicago"))
-    except Exception:
-        now_central = datetime.utcnow()
-    return now_central.strftime("%Y%m%d")
-
-
-# ------------------------------------------------------------------------------
-# FlightAPI.io (flight status)
-# ------------------------------------------------------------------------------
+# ==============================
+# FlightAPI.io Settings (STATUS)
+# ==============================
 
 FLIGHTAPI_KEY = os.getenv("FLIGHTAPI_KEY")
 
 
-def fetch_status_flightapi(
-    airline: str,
-    flight_number: str,
-    flight_date_yyyymmdd: str,
-    departure: str | None = None,
-    arrival: str | None = None,
-) -> dict:
+def fetch_status_and_times(airline: str, flight_number: str, flight_date: str):
     """
-    Call FlightAPI.io /airline endpoint and return a normalized dict:
+    Call FlightAPI.io's airline endpoint:
 
-    {
+    https://api.flightapi.io/airline/{KEY}?num={flight_number}&name={airline}&date={YYYYMMDD}
+
+    Returns a dict:
+      {
         "Status": "Arrived" / "Scheduled" / "Delayed" / ...,
-        "EstimatedDeparture": "09:29, Nov 26" or None,
-        "EstimatedArrival": "10:02, Nov 26" or None
-    }
-
-    - Matches airline + flight number.
-    - Prefers flights whose departure/arrival airport codes match the
-      provided departure/arrival (exact direction).
-    - If no match found by direction, falls back to the first result.
+        "EstimatedDeparture": "14:40, Nov 26" or "",
+        "EstimatedArrival": "17:06, Nov 26" or ""
+      }
     """
     if not FLIGHTAPI_KEY:
         return {
-            "Status": "Missing FLIGHTAPI_KEY",
-            "EstimatedDeparture": None,
-            "EstimatedArrival": None,
+            "Status": "API Error (Missing FLIGHTAPI_KEY)",
+            "EstimatedDeparture": "",
+            "EstimatedArrival": "",
         }
 
-    airline_code = airline.strip().lower()
-    flight_number = str(flight_number).strip()
-    date_param = flight_date_yyyymmdd.strip()
+    airline_code = airline.strip().lower()  # matches example in docs
+    date_str = flight_date.replace("-", "")  # YYYYMMDD
 
     url = (
         f"https://api.flightapi.io/airline/{FLIGHTAPI_KEY}"
-        f"?num={flight_number}&name={airline_code}&date={date_param}"
+        f"?num={flight_number}&name={airline_code}&date={date_str}"
     )
 
     try:
         resp = requests.get(url, timeout=20)
-    except Exception as e:
-        return {
-            "Status": f"Request error: {e}",
-            "EstimatedDeparture": None,
-            "EstimatedArrival": None,
-        }
-
-    if resp.status_code != 200:
-        return {
-            "Status": f"API Error ({resp.status_code})",
-            "EstimatedDeparture": None,
-            "EstimatedArrival": None,
-        }
-
-    try:
-        data = resp.json()
-    except Exception as e:
-        return {
-            "Status": f"JSON error: {e}",
-            "EstimatedDeparture": None,
-            "EstimatedArrival": None,
-        }
-
-    # ------------------------------------------------------------------
-    # Shape 1: { "flights": [ {...}, ... ], "flight": null, ... }
-    # ------------------------------------------------------------------
-    if isinstance(data, dict) and "flights" in data:
-        flights = data.get("flights") or []
-        if not flights:
+        if resp.status_code != 200:
             return {
-                "Status": "Not Found",
-                "EstimatedDeparture": None,
-                "EstimatedArrival": None,
+                "Status": f"API Error ({resp.status_code})",
+                "EstimatedDeparture": "",
+                "EstimatedArrival": "",
             }
 
-        dep_code = departure.strip().upper() if departure else None
-        arr_code = arrival.strip().upper() if arrival else None
+        data = resp.json()
 
-        def matches_direction(f: dict) -> bool:
-            if dep_code and f.get("departureAirportCode", "").upper() != dep_code:
-                return False
-            if arr_code and f.get("arrivalAirportCode", "").upper() != arr_code:
-                return False
-            return True
-
-        matching = [f for f in flights if matches_direction(f)]
-        if not matching:
-            # Fallback: no direction-specific match, use all flights
-            matching = flights
-
-        # Sort by departureTime if parseable, earliest first
-        def parse_departure_time(f: dict):
-            t = f.get("departureTime")
-            if not t:
-                return datetime.max
-            # Example format: "09:29, Nov 26" – we add the given year
-            try:
-                dt_no_year = datetime.strptime(t, "%H:%M, %b %d")
-                year = int(flight_date_yyyymmdd[:4])
-                return dt_no_year.replace(year=year)
-            except Exception:
-                return datetime.max
-
-        chosen = sorted(matching, key=parse_departure_time)[0]
-
-        # Map status
-        status_val = chosen.get("displayStatus") or chosen.get("status")
-        if isinstance(status_val, int):
-            status_map = {
-                1: "Scheduled",
-                2: "Arrived",
-                3: "Departed",
-                4: "Delayed",
-                5: "Cancelled",
-            }
-            status_text = status_map.get(status_val, "Unknown")
-        else:
-            status_text = status_val or "Unknown"
-
-        est_dep = chosen.get("departureTime")
-        est_arr = chosen.get("arrivalTime")
-
-        return {
-            "Status": status_text,
-            "EstimatedDeparture": est_dep,
-            "EstimatedArrival": est_arr,
-        }
-
-    # ------------------------------------------------------------------
-    # Shape 2: [ {"departure": {...}}, {"arrival": {...}}, {"status": "..."} ]
-    # ------------------------------------------------------------------
-    if isinstance(data, list):
-        departure_block = {}
-        arrival_block = {}
         status_text = "Unknown"
+        est_dep = ""
+        est_arr = ""
 
-        for block in data:
-            if isinstance(block, dict):
-                if "departure" in block:
-                    departure_block = block["departure"] or {}
-                elif "arrival" in block:
-                    arrival_block = block["arrival"] or {}
-                elif "status" in block:
+        # Case 1: Airline endpoint returns a dict with "flights"
+        # Example:
+        # {
+        #   "flights": [
+        #       {
+        #         "airlineCode": "DL",
+        #         "flightNumber": 3758,
+        #         "displayStatus": "Arrived",
+        #         "departureTime": "09:29, Nov 26",
+        #         "arrivalTime": "10:02, Nov 26",
+        #         ...
+        #       },
+        #       ...
+        #   ],
+        #   "flight": null,
+        #   "emptyResults": false
+        # }
+        if isinstance(data, dict) and "flights" in data:
+            flights = data.get("flights") or []
+            if flights:
+                # Just take the first match for now
+                f = flights[0]
+                status_text = f.get("displayStatus") or "Unknown"
+
+                # These are the times you showed from the API
+                est_dep = f.get("departureTime") or ""
+                est_arr = f.get("arrivalTime") or ""
+
+        # Case 2: older list format: [ {departure}, {arrival}, {aircraft}, {status:"..."} ]
+        elif isinstance(data, list):
+            for block in data:
+                if isinstance(block, dict) and "status" in block:
                     status_text = block.get("status") or "Unknown"
+            # departure / arrival estimatedTime sometimes live in the first two blocks
+            if len(data) >= 2:
+                dep_block = data[0] or {}
+                arr_block = data[1] or {}
 
-        est_dep = (
-            departure_block.get("estimatedTime")
-            or departure_block.get("scheduledTime")
-        )
-        est_arr = (
-            arrival_block.get("estimatedTime")
-            or arrival_block.get("scheduledTime")
-        )
+                dep = dep_block.get("departure") or dep_block
+                arr = arr_block.get("arrival") or arr_block
+
+                est_dep = dep.get("estimatedTime") or dep.get("scheduledTime") or ""
+                est_arr = arr.get("estimatedTime") or arr.get("scheduledTime") or ""
 
         return {
             "Status": status_text,
@@ -237,17 +153,17 @@ def fetch_status_flightapi(
             "EstimatedArrival": est_arr,
         }
 
-    # Unknown shape
-    return {
-        "Status": "Not Found",
-        "EstimatedDeparture": None,
-        "EstimatedArrival": None,
-    }
+    except Exception as e:
+        return {
+            "Status": f"Error: {e}",
+            "EstimatedDeparture": "",
+            "EstimatedArrival": "",
+        }
 
 
-# ------------------------------------------------------------------------------
-# Amadeus (Flight Analysis)
-# ------------------------------------------------------------------------------
+# ==============================
+# Amadeus Settings (Flight Analysis)
+# ==============================
 
 AMADEUS_CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID")
 AMADEUS_CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET")
@@ -290,18 +206,17 @@ def get_amadeus_token():
 
 
 def search_lowest_fare_amadeus(origin, destination, departure_date, return_date):
-    """
-    Search lowest roundtrip fare using Amadeus.
-
-    origin/destination: IATA codes
-    dates: YYYY-MM-DD
-    """
+    """Roundtrip fare search via Amadeus."""
     try:
         token = get_amadeus_token()
     except Exception as e:
         return {
             "Origin": origin,
             "Destination": destination,
+            "DepartureDate": departure_date,
+            "ReturnDate": return_date,
+            "Price": None,
+            "Currency": "USD",
             "Error": f"Auth error: {e}",
         }
 
@@ -327,6 +242,10 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
             return {
                 "Origin": origin,
                 "Destination": destination,
+                "DepartureDate": departure_date,
+                "ReturnDate": return_date,
+                "Price": None,
+                "Currency": "USD",
                 "Error": f"API error {resp.status_code}",
             }
 
@@ -336,6 +255,10 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
             return {
                 "Origin": origin,
                 "Destination": destination,
+                "DepartureDate": departure_date,
+                "ReturnDate": return_date,
+                "Price": None,
+                "Currency": "USD",
                 "Error": "No fares found",
             }
 
@@ -358,13 +281,17 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
         return {
             "Origin": origin,
             "Destination": destination,
+            "DepartureDate": departure_date,
+            "ReturnDate": return_date,
+            "Price": None,
+            "Currency": "USD",
             "Error": f"Request error: {e}",
         }
 
 
-# ------------------------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------------------------
+# ==============================
+# HOME PAGE
+# ==============================
 
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -384,17 +311,15 @@ def home():
     return render_template("index.html")
 
 
-# --------------------------- Flight Status ------------------------------------
+# ==============================
+# FLIGHT STATUS PAGE
+# ==============================
 
 @app.route("/flight-status", methods=["GET", "POST"])
 def flight_status():
     global last_results
 
-    company = (
-        request.args.get("company")
-        or request.form.get("company")
-        or ""
-    ).strip().lower()
+    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
 
     if not is_company_allowed(company):
         flash("Access denied.")
@@ -403,44 +328,95 @@ def flight_status():
     flight_info = None
     uploaded_results = None
 
-    # Distinguish between manual lookup and file upload
     if request.method == "POST":
-        # FILE UPLOAD POST comes to /upload/<company>, not here
-        # Manual form posts directly here.
-        airline = request.form.get("airline", "").strip().upper()
-        flight_number = request.form.get("flight_number", "").strip()
-        departure = request.form.get("departure", "").strip().upper()
-        arrival = request.form.get("arrival", "").strip().upper()
+        # If a file is present, treat as Excel upload
+        if "file" in request.files and request.files["file"].filename:
+            file = request.files["file"]
 
-        if not all([airline, flight_number, departure, arrival]):
-            flash("All fields are required.")
-            return render_template(
-                "flight_status.html",
-                company=company,
-                flight_info=None,
-                uploaded_results=None,
-            )
+            try:
+                if file.filename.lower().endswith(".csv"):
+                    df = pd.read_csv(file)
+                else:
+                    df = pd.read_excel(file, sheet_name=0)
 
-        flight_date = today_central_yyyymmdd()
-        status_data = fetch_status_flightapi(
-            airline=airline,
-            flight_number=flight_number,
-            flight_date_yyyymmdd=flight_date,
-            departure=departure,
-            arrival=arrival,
-        )
+                df.columns = df.columns.str.strip().str.lower()
 
-        flight_info = {
-            "Airline": airline,
-            "FlightNumber": flight_number,
-            "From": departure,
-            "To": arrival,
-            "Status": status_data.get("Status", "Unknown"),
-            "EstimatedDeparture": status_data.get("EstimatedDeparture"),
-            "EstimatedArrival": status_data.get("EstimatedArrival"),
-        }
+                required = ["airline", "flightnumber", "departure", "arrival"]
+                missing = [c for c in required if c not in df.columns]
+                if missing:
+                    flash(f"Missing required columns: {missing}")
+                    return render_template(
+                        "flight_status.html",
+                        company=company,
+                        flight_info=None,
+                        uploaded_results=None,
+                    )
 
-        last_results = [flight_info]
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                results = []
+
+                for _, row in df.iterrows():
+                    airline = str(row["airline"]).strip().upper()
+                    flight_number = str(row["flightnumber"]).strip()
+                    dep = str(row["departure"]).strip().upper()
+                    arr = str(row["arrival"]).strip().upper()
+
+                    details = fetch_status_and_times(airline, flight_number, today_str)
+
+                    results.append(
+                        {
+                            "Airline": airline,
+                            "FlightNumber": flight_number,
+                            "From": dep,
+                            "To": arr,
+                            "Status": details.get("Status", "Unknown"),
+                            "EstimatedDeparture": details.get("EstimatedDeparture", ""),
+                            "EstimatedArrival": details.get("EstimatedArrival", ""),
+                        }
+                    )
+
+                uploaded_results = results
+                last_results = results  # OPTION B: whatever is displayed is what gets downloaded
+
+            except Exception as e:
+                flash(f"Error processing file: {e}")
+                return render_template(
+                    "flight_status.html",
+                    company=company,
+                    flight_info=None,
+                    uploaded_results=None,
+                )
+
+        # Otherwise, handle manual lookup
+        else:
+            airline = request.form.get("airline", "").strip().upper()
+            flight_number = request.form.get("flight_number", "").strip()
+            departure = request.form.get("departure", "").strip().upper()
+            arrival = request.form.get("arrival", "").strip().upper()
+
+            if not all([airline, flight_number, departure, arrival]):
+                flash("All fields are required.")
+                return render_template(
+                    "flight_status.html",
+                    company=company,
+                    flight_info=None,
+                    uploaded_results=None,
+                )
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            details = fetch_status_and_times(airline, flight_number, today_str)
+
+            flight_info = {
+                "Airline": airline,
+                "FlightNumber": flight_number,
+                "From": departure,
+                "To": arrival,
+                "Status": details.get("Status", "Unknown"),
+                "EstimatedDeparture": details.get("EstimatedDeparture", ""),
+                "EstimatedArrival": details.get("EstimatedArrival", ""),
+            }
+
+            last_results = [flight_info]
 
     return render_template(
         "flight_status.html",
@@ -450,85 +426,17 @@ def flight_status():
     )
 
 
-# Separate upload endpoint so URL stays /upload/<company> as your logs show
-@app.route("/upload/<company>", methods=["POST"])
-def upload_file(company):
+# ==============================
+# DOWNLOAD STATUS RESULTS (Option B)
+# ==============================
+
+@app.route("/download-excel")
+def download_excel():
+    """Download whichever results were shown last (manual or upload)."""
     global last_results
 
-    company = (company or "").strip().lower()
-    if not is_company_allowed(company):
-        flash("Access denied.")
-        return redirect(url_for("home"))
-
-    if "file" not in request.files:
-        flash("No file uploaded.")
-        return redirect(url_for("flight_status", company=company))
-
-    file = request.files["file"]
-    if not file.filename:
-        flash("No selected file.")
-        return redirect(url_for("flight_status", company=company))
-
-    try:
-        if file.filename.lower().endswith(".csv"):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file, sheet_name=0)
-
-        df.columns = df.columns.str.strip().str.lower()
-        required_cols = ["airline", "flightnumber", "departure", "arrival"]
-        missing = [c for c in required_cols if c not in df.columns]
-        if missing:
-            flash(f"Missing required columns: {missing}")
-            return redirect(url_for("flight_status", company=company))
-
-        results = []
-        flight_date = today_central_yyyymmdd()
-
-        for _, row in df.iterrows():
-            airline = str(row["airline"]).strip().upper()
-            flight_number = str(row["flightnumber"]).strip()
-            dep = str(row["departure"]).strip().upper()
-            arr = str(row["arrival"]).strip().upper()
-
-            status_data = fetch_status_flightapi(
-                airline=airline,
-                flight_number=flight_number,
-                flight_date_yyyymmdd=flight_date,
-                departure=dep,
-                arrival=arr,
-            )
-
-            results.append(
-                {
-                    "Airline": airline,
-                    "FlightNumber": flight_number,
-                    "From": dep,
-                    "To": arr,
-                    "Status": status_data.get("Status", "Unknown"),
-                    "EstimatedDeparture": status_data.get("EstimatedDeparture"),
-                    "EstimatedArrival": status_data.get("EstimatedArrival"),
-                }
-            )
-
-        last_results = results
-
-        return render_template(
-            "flight_status.html",
-            company=company,
-            flight_info=None,
-            uploaded_results=results,
-        )
-
-    except Exception as e:
-        flash(f"Error processing file: {e}")
-        return redirect(url_for("flight_status", company=company))
-
-
-@app.route("/download")
-def download_excel():
     if not last_results:
-        flash("No results to download.")
+        flash("No results to download yet.")
         return redirect(url_for("home"))
 
     df = pd.DataFrame(last_results)
@@ -543,17 +451,15 @@ def download_excel():
     )
 
 
-# --------------------------- Flight Analysis (Amadeus) ------------------------
+# ==============================
+# FLIGHT ANALYSIS (Amadeus)
+# ==============================
 
 @app.route("/flight-analysis", methods=["GET", "POST"])
 def flight_analysis():
     global last_analysis_results
 
-    company = (
-        request.args.get("company")
-        or request.form.get("company")
-        or ""
-    ).strip().lower()
+    company = (request.args.get("company") or request.form.get("company") or "").strip().lower()
 
     if not is_company_allowed(company):
         flash("Access denied.")
@@ -562,48 +468,29 @@ def flight_analysis():
     analysis_results = None
 
     if request.method == "POST":
-        origins = [
-            o.strip().upper()
-            for o in request.form.getlist("origins")
-            if o.strip()
-        ]
-        destinations = [
-            d.strip().upper()
-            for d in request.form.getlist("destinations")
-            if d.strip()
-        ]
-
+        # use getlist() to collect repeated fields
+        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
+        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
 
         if not origins or not destinations:
             flash("Please enter at least one origin and one destination.")
-            return render_template(
-                "flight_analysis.html",
-                company=company,
-                analysis_results=None,
-            )
+            return render_template("flight_analysis.html", company=company)
 
         if not outbound_date or not return_date:
             flash("Please select outbound and return dates.")
-            return render_template(
-                "flight_analysis.html",
-                company=company,
-                analysis_results=None,
-            )
+            return render_template("flight_analysis.html", company=company)
 
-        analysis_results = []
+        results = []
         for origin in origins:
             for dest in destinations:
-                result = search_lowest_fare_amadeus(
-                    origin,
-                    dest,
-                    outbound_date,
-                    return_date,
+                results.append(
+                    search_lowest_fare_amadeus(origin, dest, outbound_date, return_date)
                 )
-                analysis_results.append(result)
 
-        last_analysis_results = analysis_results
+        analysis_results = results
+        last_analysis_results = results
 
     return render_template(
         "flight_analysis.html",
@@ -614,8 +501,10 @@ def flight_analysis():
 
 @app.route("/download-analysis")
 def download_analysis_excel():
+    global last_analysis_results
+
     if not last_analysis_results:
-        flash("No analysis results to download.")
+        flash("No analysis results to download yet.")
         return redirect(url_for("home"))
 
     df = pd.DataFrame(last_analysis_results)
@@ -630,9 +519,7 @@ def download_analysis_excel():
     )
 
 
-# ------------------------------------------------------------------------------
-# Entry point (for local dev; Render uses gunicorn)
-# ------------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # For local testing
+    app.run(debug=True)
+
