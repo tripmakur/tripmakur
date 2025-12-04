@@ -1,11 +1,116 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h1 class="text-3xl font-bold mb-6 text-gray-800">Flight Analysis</h1>
+<div class="container mx-auto p-6">
 
-<p>Analysis enabled. (Processing logic can be added.)</p>
+    <h1 class="text-3xl font-bold mb-6 text-gray-800">Flight Analysis</h1>
+
+    <p class="mb-4 text-gray-600">
+        Enter up to <strong>10 origin airports</strong> and <strong>3 destination airports</strong>.
+        Choose outbound + return dates and get the lowest available roundtrip fares (Amadeus test environment).
+    </p>
+
+    <!-- Flight Analysis Form -->
+    <form method="POST" action="{{ url_for('flight_analysis', company=company) }}" class="space-y-6">
+
+        <!-- ORIGINS -->
+        <div>
+            <h3 class="text-xl font-semibold mb-2 text-gray-700">Origin Airports (Up to 10)</h3>
+
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {% for i in range(10) %}
+                    <input type="text" name="origins" placeholder="Origin {{ i+1 }}"
+                           class="border p-2 rounded w-full" />
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- DESTINATIONS -->
+        <div>
+            <h3 class="text-xl font-semibold mb-2 text-gray-700">Destination Airports (Up to 3)</h3>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {% for i in range(3) %}
+                    <input type="text" name="destinations" placeholder="Destination {{ i+1 }}"
+                           class="border p-2 rounded w-full" />
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- DATE INPUTS -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Outbound Date:</label>
+                <input type="date" name="outbound_date" class="border p-2 rounded w-full" required />
+            </div>
+
+            <div>
+                <label class="block mb-1 font-semibold text-gray-700">Return Date:</label>
+                <input type="date" name="return_date" class="border p-2 rounded w-full" required />
+            </div>
+        </div>
+
+        <!-- SUBMIT BUTTON -->
+        <button class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">
+            Run Flight Analysis
+        </button>
+
+    </form>
+
+    <!-- RESULTS -->
+    {% if analysis_results %}
+    <div class="mt-10">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Results</h2>
+
+        <table class="w-full border-collapse">
+            <thead>
+                <tr class="bg-gray-200">
+                    <th class="p-2 border">Origin</th>
+                    <th class="p-2 border">Destination</th>
+                    <th class="p-2 border">Outbound</th>
+                    <th class="p-2 border">Return</th>
+                    <th class="p-2 border">Lowest Price</th>
+                    <th class="p-2 border">Currency</th>
+                    <th class="p-2 border">Error</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in analysis_results %}
+                <tr class="bg-white hover:bg-gray-50">
+                    <td class="p-2 border">{{ item.Origin }}</td>
+                    <td class="p-2 border">{{ item.Destination }}</td>
+                    <td class="p-2 border">{{ item.DepartureDate }}</td>
+                    <td class="p-2 border">{{ item.ReturnDate }}</td>
+                    <td class="p-2 border font-semibold">
+                        {% if item.Price %}
+                            ${{ item.Price }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="p-2 border">{{ item.Currency }}</td>
+                    <td class="p-2 border text-red-600">
+                        {{ item.Error }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- DOWNLOAD BUTTON -->
+        <a href="{{ url_for('download_analysis_excel') }}"
+           class="inline-block mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+            Download Results (Excel)
+        </a>
+
+    </div>
+    {% endif %}
+
+</div>
 
 {% endblock %}
+
 
 
 
