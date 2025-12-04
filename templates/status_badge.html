@@ -1,30 +1,18 @@
-{% macro status_badge(status_text) %}
-    {% set s = (status_text or "")|lower %}
+{% macro status_badge(status) %}
+    {% set s = status.lower() %}
 
-    {% if "cancel" in s %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-            {{ status_text }}
-        </span>
-    {% elif "delay" in s %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-            {{ status_text }}
-        </span>
-    {% elif "depart" in s or "in air" in s %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-            {{ status_text }}
-        </span>
-    {% elif "arriv" in s or "land" in s %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-            {{ status_text }}
-        </span>
-    {% elif "error" in s or "api" in s or "unknown" in s or "not found" in s %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-800">
-            {{ status_text }}
-        </span>
+    {% if "delayed" in s %}
+        <span class="px-2 py-1 bg-yellow-600 text-white rounded">Delayed</span>
+    {% elif "arrived" in s %}
+        <span class="px-2 py-1 bg-green-600 text-white rounded">Arrived</span>
+    {% elif "departed" in s or "in air" in s %}
+        <span class="px-2 py-1 bg-blue-600 text-white rounded">In Air</span>
+    {% elif "cancel" in s %}
+        <span class="px-2 py-1 bg-red-600 text-white rounded">Cancelled</span>
+    {% elif "scheduled" in s %}
+        <span class="px-2 py-1 bg-gray-600 text-white rounded">Scheduled</span>
     {% else %}
-        <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
-            {{ status_text }}
-        </span>
+        <span class="px-2 py-1 bg-gray-400 text-white rounded">Unknown</span>
     {% endif %}
 {% endmacro %}
 
