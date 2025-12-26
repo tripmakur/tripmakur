@@ -19,6 +19,10 @@ from flask import (
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "k9sar-secret")
 
+@app.get("/")
+def root():
+    return redirect("/K9sar")
+
 # =====================================================
 # K9SAR CONFIG
 # =====================================================
