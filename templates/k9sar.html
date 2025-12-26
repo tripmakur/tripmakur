@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>K9SAR</title>
 
+  <!-- PWA -->
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#0b1220">
+
+  <!-- iOS "app-like" -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="K9SAR">
+
+  <!-- iOS icon (we’ll point this at your logo-derived icon) -->
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -16,7 +29,7 @@
       --text:#eaf0ff;
       --muted:#a9b7d6;
       --border:rgba(255,255,255,.10);
-      --shadow:0 20px 60px rgba(0,0,0,.45);
+      --shadow:0 18px 55px rgba(0,0,0,.45);
       --shadow2:0 12px 28px rgba(0,0,0,.35);
       --accent:#5b8cff;
       --accent2:#8b5bff;
@@ -27,57 +40,40 @@
     *{ box-sizing:border-box; }
     body{
       margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
       color:var(--text);
       background:
         radial-gradient(900px 600px at 20% 10%, rgba(91,140,255,.25), transparent 55%),
         radial-gradient(700px 500px at 85% 30%, rgba(139,91,255,.18), transparent 55%),
         radial-gradient(900px 700px at 50% 110%, rgba(40,255,160,.08), transparent 60%),
         var(--bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    a{ color: inherit; text-decoration:none; }
+    a{ color:inherit; text-decoration:none; }
     .topbar{
-      position: sticky;
-      top:0;
-      z-index:20;
-      backdrop-filter: blur(10px);
-      background: rgba(11,18,32,.65);
+      position: sticky; top:0; z-index:20;
+      backdrop-filter: blur(12px);
+      background: rgba(11,18,32,.70);
       border-bottom:1px solid var(--border);
+      padding-top: env(safe-area-inset-top);
     }
     .topbar-inner{
-      max-width:1200px;
-      margin:0 auto;
+      max-width:1200px; margin:0 auto;
       padding:12px 14px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
     }
-    .brand{
-      display:flex; align-items:center; gap:10px;
+    .brand{ display:flex; align-items:center; gap:10px; min-width: 0; }
+    .brand img{
+      width:40px; height:40px; border-radius:14px; object-fit:cover;
+      box-shadow: 0 12px 30px rgba(91,140,255,.20);
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
     }
-    .logo{
-      width:40px; height:40px; border-radius:14px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      box-shadow: 0 12px 30px rgba(91,140,255,.25);
-      display:grid; place-items:center;
-      font-weight:900;
-      letter-spacing:.3px;
-    }
-    .brand h1{ margin:0; font-size:16px; }
+    .brand h1{ margin:0; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .brand small{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }
 
-    .top-actions{
-      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-    }
-    .chip{
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.05);
-      padding:8px 10px;
-      border-radius:999px;
-      font-size:13px;
-      color:var(--muted);
-    }
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
     .btn{
       border:none;
       border-radius:14px;
@@ -92,36 +88,17 @@
     }
     .btn.primary{
       background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border: none;
+      border:none;
       box-shadow: 0 14px 34px rgba(91,140,255,.22);
     }
-    .btn.ghost{
-      background: rgba(255,255,255,.05);
-      box-shadow:none;
-    }
+    .btn.ghost{ background: rgba(255,255,255,.05); box-shadow:none; }
+    .btn.danger{ background: rgba(255,91,110,.14); border:1px solid rgba(255,91,110,.25); }
     .btn:active{ transform: translateY(1px); }
     .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
-    .btn.danger{
-      background: rgba(255,91,110,.14);
-      border:1px solid rgba(255,91,110,.25);
-    }
 
-    .container{
-      max-width:1200px;
-      margin:0 auto;
-      padding:14px;
-      display:grid;
-      gap:14px;
-    }
-
-    .grid{
-      display:grid;
-      gap:14px;
-      grid-template-columns: 1fr;
-    }
-    @media (min-width: 980px){
-      .grid{ grid-template-columns: 420px 1fr; align-items:start; }
-    }
+    .container{ max-width:1200px; margin:0 auto; padding:14px; display:grid; gap:14px; }
+    .grid{ display:grid; gap:14px; grid-template-columns: 1fr; }
+    @media (min-width: 980px){ .grid{ grid-template-columns: 420px 1fr; align-items:start; } }
 
     .card{
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
@@ -133,34 +110,13 @@
       position:relative;
     }
     .card:before{
-      content:"";
-      position:absolute; inset:-2px;
-      background: radial-gradient(500px 180px at 20% 0%, rgba(91,140,255,.16), transparent 60%);
+      content:""; position:absolute; inset:-2px;
+      background: radial-gradient(520px 180px at 20% 0%, rgba(91,140,255,.16), transparent 60%);
       pointer-events:none;
     }
     .card > *{ position:relative; }
 
-    .section-title{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
-    }
-    .section-title h2{
-      margin:0;
-      font-size:14px;
-      letter-spacing:.2px;
-      text-transform:uppercase;
-      color:var(--muted);
-    }
-
-    label{
-      display:block;
-      font-size:12px;
-      color:var(--muted);
-      margin:10px 0 6px;
-    }
+    label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 6px; }
     input, textarea{
       width:100%;
       border-radius:14px;
@@ -171,19 +127,27 @@
       font-size:16px;
       outline:none;
     }
-    textarea{ resize: vertical; min-height:88px; }
+    textarea{ resize:vertical; min-height:88px; }
     input:focus, textarea:focus{
       border-color: rgba(91,140,255,.75);
       box-shadow: 0 0 0 4px rgba(91,140,255,.18);
     }
 
-    .row{
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
-      margin-top:10px;
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:13px;
+      color:var(--muted);
     }
+    .dot{ width:9px; height:9px; border-radius:999px; background: var(--muted); }
+    .dot.good{ background: var(--good); }
+    .dot.warn{ background: var(--warn); }
+    .dot.bad{ background: var(--danger); }
+
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px; }
 
     .stats{
       display:grid;
@@ -202,26 +166,6 @@
     .stat .v{ font-size:16px; font-weight:900; }
     .stat .v small{ font-size:12px; color:var(--muted); font-weight:700; }
 
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.06);
-      padding:8px 10px;
-      border-radius:999px;
-      font-size:13px;
-      color:var(--muted);
-    }
-    .dot{
-      width:9px; height:9px; border-radius:999px;
-      background: var(--muted);
-      box-shadow: 0 0 0 4px rgba(255,255,255,.05);
-    }
-    .dot.good{ background: var(--good); }
-    .dot.warn{ background: var(--warn); }
-    .dot.bad{ background: var(--danger); }
-
     #map{
       height: 420px;
       width: 100%;
@@ -229,9 +173,7 @@
       border: 1px solid var(--border);
       overflow:hidden;
     }
-    @media (max-width: 420px){
-      #map{ height: 360px; }
-    }
+    @media (max-width: 420px){ #map{ height: 360px; } }
 
     .table-wrap{
       overflow:auto;
@@ -241,19 +183,17 @@
     }
     table{
       border-collapse: collapse;
-      width: 100%;
+      width:100%;
       min-width: 880px;
     }
     th, td{
-      padding:10px 10px;
+      padding:10px;
       border-bottom:1px solid rgba(255,255,255,.08);
       font-size:13px;
       vertical-align: top;
-      color:var(--text);
     }
     th{
-      position: sticky;
-      top:0;
+      position: sticky; top:0;
       background: rgba(11,18,32,.85);
       backdrop-filter: blur(10px);
       color: var(--muted);
@@ -261,21 +201,19 @@
       letter-spacing: .35px;
       font-size: 11px;
     }
-    tr:hover td{ background: rgba(255,255,255,.03); }
 
     /* Modal */
     .modal-backdrop{
-      position: fixed;
-      inset:0;
+      position: fixed; inset:0;
       background: rgba(0,0,0,.55);
       display:none;
       z-index:50;
       padding:16px;
+      padding-top: calc(16px + env(safe-area-inset-top));
     }
     .modal{
       max-width: 820px;
-      margin: 0 auto;
-      margin-top: 60px;
+      margin: 40px auto;
       background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));
       border:1px solid var(--border);
       border-radius: 18px;
@@ -285,21 +223,10 @@
     .modal-header{
       padding:14px;
       border-bottom:1px solid rgba(255,255,255,.10);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
     }
-    .modal-header h3{
-      margin:0;
-      font-size:16px;
-      letter-spacing:.2px;
-    }
-    .modal-body{
-      padding:14px;
-      display:grid;
-      gap:10px;
-    }
+    .modal-header h3{ margin:0; font-size:16px; }
+    .modal-body{ padding:14px; display:grid; gap:10px; }
     .kv{
       display:grid;
       grid-template-columns: 140px 1fr;
@@ -311,10 +238,7 @@
       background: rgba(0,0,0,.18);
     }
     .kv .k{ color:var(--muted); }
-    .notes{
-      white-space:pre-wrap;
-      line-height:1.4;
-    }
+    .notes{ white-space:pre-wrap; line-height:1.4; }
     .modal-actions{
       padding:14px;
       border-top:1px solid rgba(255,255,255,.10);
@@ -322,27 +246,24 @@
       flex-wrap:wrap;
       gap:10px;
       justify-content:flex-end;
+      padding-bottom: calc(14px + env(safe-area-inset-bottom));
     }
-
-    .subtle{
-      color:var(--muted);
-      font-size:12px;
-      line-height:1.4;
-    }
+    .subtle{ color:var(--muted); font-size:12px; line-height:1.4; }
   </style>
 </head>
 <body>
   <div class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <div class="logo">K9</div>
+        <!-- Replace logo.png with your uploaded filename -->
+        <img src="/static/logo.png" alt="K9SAR Logo">
         <div>
           <h1>K9SAR</h1>
           <small>Training & tracking log</small>
         </div>
       </div>
 
-      <div class="top-actions">
+      <div class="actions">
         <a class="btn ghost" href="/api/k9sar/export.xlsx">Export Excel</a>
         <a class="btn ghost" href="/api/k9sar/export.csv">Export CSV</a>
         <a class="btn danger" href="/K9sar-logout">Logout</a>
@@ -352,10 +273,9 @@
 
   <div class="container">
     <div class="grid">
-      <!-- Left: controls -->
       <div class="card">
-        <div class="section-title">
-          <h2>Session</h2>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.35px;">Session</div>
           <span class="pill"><span id="statusDot" class="dot"></span><span id="status">Idle</span></span>
         </div>
 
@@ -395,17 +315,17 @@
         </div>
       </div>
 
-      <!-- Right: map + log -->
       <div class="card">
-        <div class="section-title">
-          <h2>Map</h2>
-          <span class="subtle">Live track + saved session review</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+          <div style="color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.35px;">Map</div>
+          <div class="subtle">Live track + saved session review</div>
         </div>
+
         <div id="map"></div>
 
-        <div class="section-title" style="margin-top:14px;">
-          <h2>Recent Sessions</h2>
-          <span class="subtle">Tap “View” to open details</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0 10px;">
+          <div style="color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.35px;">Recent Sessions</div>
+          <div class="subtle">Tap “View” to open details</div>
         </div>
 
         <div class="table-wrap">
@@ -429,7 +349,6 @@
     </div>
   </div>
 
-  <!-- Details modal -->
   <div id="modalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-header">
@@ -453,9 +372,15 @@
   </div>
 
 <script>
+  // Register service worker for installable app experience
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
+
   const METERS_TO_MILES = 0.000621371;
 
-  // Map
   const map = L.map('map', { zoomControl: true });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '&copy; OpenStreetMap'
@@ -469,7 +394,6 @@
 
   map.setView([39.5, -98.35], 4);
 
-  // Tracking state
   let watchId = null;
   let startTimeMs = null;
   let timerId = null;
@@ -480,10 +404,8 @@
   let totalMeters = 0;
   let track = [];
 
-  // Details state
   let currentDetails = null;
 
-  // UI helpers
   function setStatus(msg, level="idle"){
     document.getElementById("status").textContent = msg;
     const dot = document.getElementById("statusDot");
@@ -533,7 +455,6 @@
     return s || "—";
   }
 
-  // Log
   async function refreshLog(){
     const r = await fetch("/api/k9sar/sessions?limit=50");
     const rows = await r.json();
@@ -564,10 +485,7 @@
     }
   }
 
-  // Modal
-  function openModal(){
-    document.getElementById("modalBackdrop").style.display = "block";
-  }
+  function openModal(){ document.getElementById("modalBackdrop").style.display = "block"; }
   function closeModal(){
     document.getElementById("modalBackdrop").style.display = "none";
     currentDetails = null;
@@ -583,10 +501,7 @@
   async function openDetails(id){
     const r = await fetch(`/api/k9sar/sessions/${id}`);
     const d = await r.json();
-    if (!r.ok){
-      alert("Could not load details.");
-      return;
-    }
+    if (!r.ok){ alert("Could not load details."); return; }
     currentDetails = d;
 
     document.getElementById("detailsTitle").textContent = `(#${d.id})`;
@@ -632,34 +547,21 @@
     }
   });
 
-  // Buttons
   document.getElementById("refreshBtn").addEventListener("click", refreshLog);
 
   document.getElementById("startBtn").addEventListener("click", () => {
-    if (!navigator.geolocation){
-      alert("Geolocation not supported.");
-      return;
-    }
-
+    if (!navigator.geolocation){ alert("Geolocation not supported."); return; }
     const dog = document.getElementById("dogName").value.trim();
-    if (!dog){
-      alert("Please enter the dog's name.");
-      return;
-    }
+    if (!dog){ alert("Please enter the dog's name."); return; }
 
-    totalMeters = 0;
-    lastPoint = null;
-    startPoint = null;
-    endPoint = null;
+    totalMeters = 0; lastPoint = null; startPoint = null; endPoint = null;
     resetMapAndTrack();
 
     startTimeMs = Date.now();
     setStatus("Tracking", "good");
     document.getElementById("weather").textContent = "Will save on Stop";
-
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
-
     timerId = setInterval(updateUI, 1000);
 
     watchId = navigator.geolocation.watchPosition(
@@ -672,7 +574,6 @@
           startMarker = L.marker([p.lat, p.lng]).addTo(map).bindPopup("Start").openPopup();
           map.setView([p.lat, p.lng], 16);
         }
-
         if (lastPoint) totalMeters += haversineMeters(lastPoint, p);
         lastPoint = p;
         endPoint = p;
@@ -685,10 +586,7 @@
 
         updateUI();
       },
-      (err) => {
-        alert("GPS error: " + err.message);
-        setStatus("GPS Error", "bad");
-      },
+      (err) => { alert("GPS error: " + err.message); setStatus("GPS Error", "bad"); },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
     );
   });
@@ -747,11 +645,11 @@
     updateUI();
   });
 
-  // Initial load
   setStatus("Idle");
   refreshLog();
 </script>
 </body>
 </html>
+
 
 
