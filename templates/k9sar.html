@@ -13,10 +13,24 @@
     label { display:block; margin-top:10px; font-weight:600; }
     input, textarea { padding: 10px; margin: 6px 0; width: 100%; max-width: 520px; font-size: 16px; }
     button { padding: 10px 14px; font-size: 16px; margin-right: 8px; margin-top: 10px; }
-    #map { height: 340px; width: 100%; max-width: 720px; border-radius: 12px; margin-top: 14px; }
-    table { border-collapse: collapse; margin-top: 14px; width: 100%; max-width: 900px; }
-    th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; }
+    #map { height: 340px; width: 100%; max-width: 980px; border-radius: 12px; margin-top: 14px; }
+    table { border-collapse: collapse; margin-top: 14px; width: 100%; max-width: 1100px; }
+    th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; vertical-align: top; }
     .stat { margin: 6px 0; }
+
+    .panel {
+      max-width: 1100px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 12px;
+      background: #fafafa;
+    }
+    .panel h3 { margin: 6px 0 10px; }
+    .muted { color: #666; }
+    .nowrap { white-space: nowrap; }
+    .actions button { margin-top: 6px; }
+    .small { font-size: 13px; }
   </style>
 </head>
 <body>
@@ -25,11 +39,9 @@
     <a href="/K9sar-logout">Logout</a>
   </div>
 
-  <!-- ✅ Dog Name -->
   <label for="dogName">Dog Name</label>
   <input id="dogName" placeholder="e.g., Rex" />
 
-  <!-- ✅ Notes -->
   <label for="notes">Notes</label>
   <textarea id="notes" rows="3" placeholder="Training notes..."></textarea>
 
@@ -42,17 +54,51 @@
 
   <div class="stat"><b>Status:</b> <span id="status">Idle</span></div>
   <div class="stat"><b>Elapsed:</b> <span id="elapsed">0</span> sec</div>
-  <div class="stat"><b>Distance:</b> <span id="distance">0.00</span> miles</div>
+  <div class="stat"><b>Distance:</b> <span id="distance">0.000</span> miles</div>
   <div class="stat"><b>Last GPS:</b> <span id="gps">—</span></div>
-  <div class="stat"><b>Weather:</b> <span id="weather">Saved with session</span></div>
+  <div class="stat"><b>Weather:</b> <span id="weather">—</span></div>
 
   <div id="map"></div>
+
+  <!-- Details Panel -->
+  <div id="detailsPanel" class="panel" style="display:none;">
+    <h3>Session Details <span class="muted" id="detailsTitle"></span></h3>
+    <div class="small"><b>Dog:</b> <span id="detailsDog"></span></div>
+    <div class="small"><b>Start:</b> <span id="detailsStart"></span></div>
+    <div class="small"><b>Stop:</b> <span id="detailsStop"></span></div>
+    <div class="small"><b>Distance:</b> <span id="detailsDistance"></span> mi</div>
+    <div class="small"><b>Weather:</b> <span id="detailsWeather"></span></div>
+
+    <div style="margin-top:10px;">
+      <b>Notes</b>
+      <div id="detailsNotes" style="white-space:pre-wrap; margin-top:6px;"></div>
+    </div>
+
+    <div class="actions" style="margin-top:10px;">
+      <button id="btnShowTrack">Show Saved Track</button>
+      <button id="btnZoomStart">Zoom to Start</button>
+      <button id="btnZoomEnd">Zoom to End</button>
+      <button id="btnCloseDetails" style="float:right;">Close</button>
+      <div style="clear:both;"></div>
+    </div>
+
+    <div class="muted small" style="margin-top:6px;">
+      “Show Saved Track” draws the track stored in the database for this session.
+    </div>
+  </div>
 
   <h2>Recent Sessions</h2>
   <table>
     <thead>
       <tr>
-        <th>ID</th><th>Dog</th><th>Start</th><th>Stop</th><th>Duration (s)</th><th>Distance (mi)</th>
+        <th class="nowrap">ID</th>
+        <th>Dog</th>
+        <th>Start</th>
+        <th>Stop</th>
+        <th class="nowrap">Duration (s)</th>
+        <th class="nowrap">Distance (mi)</th>
+        <th>Notes (preview)</th>
+        <th class="nowrap">Action</th>
       </tr>
     </thead>
     <tbody id="logBody"></tbody>
@@ -67,12 +113,14 @@
     maxZoom: 19, attribution: '&copy; OpenStreetMap'
   }).addTo(map);
 
-  let polyline = L.polyline([], {}).addTo(map);
+  let livePolyline = L.polyline([], {}).addTo(map);  // live tracking line
+  let savedPolyline = L.polyline([], {});            // for viewing saved tracks
+
   let startMarker = null;
   let endMarker = null;
   let meMarker = null;
 
-  map.setView([39.5, -98.35], 4); // default US view
+  map.setView([39.5, -98.35], 4);
 
   // --- Tracking state ---
   let watchId = null;
@@ -85,6 +133,9 @@
   let totalMeters = 0;
 
   let track = []; // list of {lat,lng,ts}
+
+  // --- Details state ---
+  let currentDetails = null;
 
   function setStatus(msg) {
     document.getElementById("status").textContent = msg;
@@ -112,153 +163,42 @@
       lastPoint ? `${lastPoint.lat.toFixed(6)}, ${lastPoint.lng.toFixed(6)}` : "—";
   }
 
+  function resetMapAndTrack() {
+    livePolyline.setLatLngs([]);
+    track = [];
+
+    if (savedPolyline) {
+      try { map.removeLayer(savedPolyline); } catch(e) {}
+    }
+    savedPolyline = L.polyline([], {});
+
+    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
+    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+  }
+
   async function refreshLog() {
     const r = await fetch("/api/k9sar/sessions?limit=50");
     const rows = await r.json();
     const tbody = document.getElementById("logBody");
     tbody.innerHTML = "";
+
     for (const row of rows) {
       const tr = document.createElement("tr");
+
+      const preview = (row.notes_preview || "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
       tr.innerHTML = `
-        <td>${row.id}</td>
+        <td class="nowrap">${row.id}</td>
         <td>${row.dog_name}</td>
         <td>${row.start_time}</td>
         <td>${row.stop_time}</td>
-        <td>${row.duration_seconds}</td>
-        <td>${Number(row.distance_miles).toFixed(3)}</td>
+        <td class="nowrap">${row.duration_seconds}</td>
+        <td class="nowrap">${Number(row.distance_miles).toFixed(3)}</td>
+        <td>${preview || '<span class="muted">—</span>'}</td>
+        <td class="nowrap"><button data-id="${row.id}" class="viewBtn">View Details</button></td>
       `;
       tbody.appendChild(tr);
     }
-  }
 
-  document.getElementById("refreshBtn").addEventListener("click", refreshLog);
+    // wire buttons
+    for (const btn of doc
 
-  function resetMapAndTrack() {
-    polyline.setLatLngs([]);
-    track = [];
-    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
-    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
-  }
-
-  document.getElementById("startBtn").addEventListener("click", () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation not supported in this browser.");
-      return;
-    }
-
-    const dog = document.getElementById("dogName").value.trim();
-    if (!dog) {
-      alert("Please enter the dog's name.");
-      return;
-    }
-
-    totalMeters = 0;
-    lastPoint = null;
-    startPoint = null;
-    endPoint = null;
-    resetMapAndTrack();
-
-    startTimeMs = Date.now();
-    setStatus("Tracking...");
-    document.getElementById("weather").textContent = "Will save on Stop";
-
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = false;
-
-    timerId = setInterval(updateUI, 1000);
-
-    watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const ts = Date.now();
-
-        if (!startPoint) {
-          startPoint = p;
-          startMarker = L.marker([p.lat, p.lng]).addTo(map).bindPopup("Start").openPopup();
-          map.setView([p.lat, p.lng], 16);
-        }
-
-        if (lastPoint) totalMeters += haversineMeters(lastPoint, p);
-        lastPoint = p;
-        endPoint = p;
-
-        track.push({ lat: p.lat, lng: p.lng, ts });
-        polyline.addLatLng([p.lat, p.lng]);
-
-        if (!meMarker) {
-          meMarker = L.circleMarker([p.lat, p.lng], { radius: 8 }).addTo(map);
-        } else {
-          meMarker.setLatLng([p.lat, p.lng]);
-        }
-
-        updateUI();
-      },
-      (err) => {
-        console.error(err);
-        alert("GPS error: " + err.message);
-        setStatus("GPS Error");
-      },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-    );
-  });
-
-  document.getElementById("stopBtn").addEventListener("click", async () => {
-    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-    clearInterval(timerId);
-    timerId = null;
-
-    const stopTimeMs = Date.now();
-    const durationSeconds = startTimeMs ? Math.floor((stopTimeMs - startTimeMs) / 1000) : 0;
-
-    setStatus("Saving...");
-
-    if (endPoint) {
-      if (endMarker) map.removeLayer(endMarker);
-      endMarker = L.marker([endPoint.lat, endPoint.lng]).addTo(map).bindPopup("End");
-    }
-
-    const distanceMiles = totalMeters * METERS_TO_MILES;
-
-    const payload = {
-      dog_name: document.getElementById("dogName").value.trim(),
-      notes: document.getElementById("notes").value,
-      start_time: new Date(startTimeMs).toISOString(),
-      stop_time: new Date(stopTimeMs).toISOString(),
-      duration_seconds: durationSeconds,
-      distance_miles: distanceMiles,
-      start_lat: startPoint ? startPoint.lat : null,
-      start_lng: startPoint ? startPoint.lng : null,
-      end_lat: endPoint ? endPoint.lat : null,
-      end_lng: endPoint ? endPoint.lng : null,
-      track: track
-    };
-
-    const r = await fetch("/api/k9sar/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const out = await r.json();
-    if (!r.ok) {
-      alert("Save failed: " + (out.error || "unknown"));
-      setStatus("Error");
-      document.getElementById("weather").textContent = "—";
-    } else {
-      setStatus("Saved (ID " + out.id + ")");
-      document.getElementById("weather").textContent = "Weather snapshot saved";
-      await refreshLog();
-    }
-
-    document.getElementById("startBtn").disabled = false;
-    document.getElementById("stopBtn").disabled = true;
-
-    startTimeMs = null;
-    updateUI();
-  });
-
-  refreshLog();
-</script>
-</body>
-</html>
