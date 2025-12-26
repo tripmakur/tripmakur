@@ -21,7 +21,8 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "k9sar-secret")
 
 @app.get("/")
 def root():
-    return redirect("/K9sar")
+    return render_template("index.html")
+
 
 # =====================================================
 # K9SAR CONFIG
