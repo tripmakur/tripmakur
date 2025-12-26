@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>K9sar</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 14px; }
+    label { display:block; margin-top:10px; font-weight:600; }
+    input, textarea { padding: 10px; margin: 6px 0; width: 100%; max-width: 520px; font-size: 16px; }
+    button { padding: 10px 14px; font-size: 16px; margin-right: 8px; margin-top: 10px; }
+    #map { height: 340px; width: 100%; max-width: 720px; border-radius: 12px; margin-top: 14px; }
+    table { border-collapse: collapse; margin-top: 14px; width: 100%; max-width: 900px; }
+    th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; }
+    .stat { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1 style="margin:0 0 6px 0;">K9sar</h1>
+  <div style="margin-bottom:10px;">
+    <a href="/K9sar-logout">Logout</a>
+  </div>
+
+  <!-- ✅ Dog Name -->
+  <label for="dogName">Dog Name</label>
+  <input id="dogName" placeholder="e.g., Rex" />
+
+  <!-- ✅ Notes -->
+  <label for="notes">Notes</label>
+  <textarea id="notes" rows="3" placeholder="Training notes..."></textarea>
+
+  <div>
+    <button id="startBtn">Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="refreshBtn" style="float:right;">Refresh Log</button>
+    <div style="clear:both;"></div>
+  </div>
+
+  <div class="stat"><b>Status:</b> <span id="status">Idle</span></div>
+  <div class="stat"><b>Elapsed:</b> <span id="elapsed">0</span> sec</div>
+  <div class="stat"><b>Distance:</b> <span id="distance">0.00</span> miles</div>
+  <div class="stat"><b>Last GPS:</b> <span id="gps">—</span></div>
+  <div class="stat"><b>Weather:</b> <span id="weather">Saved with session</span></div>
+
+  <div id="map"></div>
+
+  <h2>Recent Sessions</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Dog</th><th>Start</th><th>Stop</th><th>Duration (s)</th><th>Distance (mi)</th>
+      </tr>
+    </thead>
+    <tbody id="logBody"></tbody>
+  </table>
+
+<script>
+  const METERS_TO_MILES = 0.000621371;
+
+  // --- Map setup ---
+  const map = L.map('map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  let polyline = L.polyline([], {}).addTo(map);
+  let startMarker = null;
+  let endMarker = null;
+  let meMarker = null;
+
+  map.setView([39.5, -98.35], 4); // default US view
+
+  // --- Tracking state ---
+  let watchId = null;
+  let startTimeMs = null;
+  let timerId = null;
+
+  let lastPoint = null;
+  let startPoint = null;
+  let endPoint = null;
+  let totalMeters = 0;
+
+  let track = []; // list of {lat,lng,ts}
+
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg;
+  }
+
+  function haversineMeters(a, b) {
+    const R = 6371000;
+    const toRad = (x) => x * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const s = Math.sin(dLat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * (Math.sin(dLon/2) ** 2);
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+
+  function updateUI() {
+    const elapsed = startTimeMs ? Math.floor((Date.now() - startTimeMs) / 1000) : 0;
+    document.getElementById("elapsed").textContent = elapsed;
+
+    const miles = totalMeters * METERS_TO_MILES;
+    document.getElementById("distance").textContent = miles.toFixed(3);
+
+    document.getElementById("gps").textContent =
+      lastPoint ? `${lastPoint.lat.toFixed(6)}, ${lastPoint.lng.toFixed(6)}` : "—";
+  }
+
+  async function refreshLog() {
+    const r = await fetch("/api/k9sar/sessions?limit=50");
+    const rows = await r.json();
+    const tbody = document.getElementById("logBody");
+    tbody.innerHTML = "";
+    for (const row of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.id}</td>
+        <td>${row.dog_name}</td>
+        <td>${row.start_time}</td>
+        <td>${row.stop_time}</td>
+        <td>${row.duration_seconds}</td>
+        <td>${Number(row.distance_miles).toFixed(3)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById("refreshBtn").addEventListener("click", refreshLog);
+
+  function resetMapAndTrack() {
+    polyline.setLatLngs([]);
+    track = [];
+    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
+    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+  }
+
+  document.getElementById("startBtn").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported in this browser.");
+      return;
+    }
+
+    const dog = document.getElementById("dogName").value.trim();
+    if (!dog) {
+      alert("Please enter the dog's name.");
+      return;
+    }
+
+    totalMeters = 0;
+    lastPoint = null;
+    startPoint = null;
+    endPoint = null;
+    resetMapAndTrack();
+
+    startTimeMs = Date.now();
+    setStatus("Tracking...");
+    document.getElementById("weather").textContent = "Will save on Stop";
+
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+
+    timerId = setInterval(updateUI, 1000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const ts = Date.now();
+
+        if (!startPoint) {
+          startPoint = p;
+          startMarker = L.marker([p.lat, p.lng]).addTo(map).bindPopup("Start").openPopup();
+          map.setView([p.lat, p.lng], 16);
+        }
+
+        if (lastPoint) totalMeters += haversineMeters(lastPoint, p);
+        lastPoint = p;
+        endPoint = p;
+
+        track.push({ lat: p.lat, lng: p.lng, ts });
+        polyline.addLatLng([p.lat, p.lng]);
+
+        if (!meMarker) {
+          meMarker = L.circleMarker([p.lat, p.lng], { radius: 8 }).addTo(map);
+        } else {
+          meMarker.setLatLng([p.lat, p.lng]);
+        }
+
+        updateUI();
+      },
+      (err) => {
+        console.error(err);
+        alert("GPS error: " + err.message);
+        setStatus("GPS Error");
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+    );
+  });
+
+  document.getElementById("stopBtn").addEventListener("click", async () => {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    clearInterval(timerId);
+    timerId = null;
+
+    const stopTimeMs = Date.now();
+    const durationSeconds = startTimeMs ? Math.floor((stopTimeMs - startTimeMs) / 1000) : 0;
+
+    setStatus("Saving...");
+
+    if (endPoint) {
+      if (endMarker) map.removeLayer(endMarker);
+      endMarker = L.marker([endPoint.lat, endPoint.lng]).addTo(map).bindPopup("End");
+    }
+
+    const distanceMiles = totalMeters * METERS_TO_MILES;
+
+    const payload = {
+      dog_name: document.getElementById("dogName").value.trim(),
+      notes: document.getElementById("notes").value,
+      start_time: new Date(startTimeMs).toISOString(),
+      stop_time: new Date(stopTimeMs).toISOString(),
+      duration_seconds: durationSeconds,
+      distance_miles: distanceMiles,
+      start_lat: startPoint ? startPoint.lat : null,
+      start_lng: startPoint ? startPoint.lng : null,
+      end_lat: endPoint ? endPoint.lat : null,
+      end_lng: endPoint ? endPoint.lng : null,
+      track: track
+    };
+
+    const r = await fetch("/api/k9sar/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const out = await r.json();
+    if (!r.ok) {
+      alert("Save failed: " + (out.error || "unknown"));
+      setStatus("Error");
+      document.getElementById("weather").textContent = "—";
+    } else {
+      setStatus("Saved (ID " + out.id + ")");
+      document.getElementById("weather").textContent = "Weather snapshot saved";
+      await refreshLog();
+    }
+
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+
+    startTimeMs = null;
+    updateUI();
+  });
+
+  refreshLog();
+</script>
+</body>
+</html>
