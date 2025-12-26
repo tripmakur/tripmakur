@@ -1,7 +1,9 @@
 import os
 import json
 import time
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timezone
+from functools import wraps
 from io import BytesIO
 
 import pandas as pd
@@ -15,6 +17,8 @@ from flask import (
     url_for,
     flash,
     send_file,
+    jsonify,
+    session,
 )
 
 app = Flask(__name__)
@@ -70,37 +74,18 @@ def map_status_code(code):
     return mapping.get(code, "Unknown")
 
 
-def fetch_status_flightapi(airline: str, flight_number: str,
-                           departure_airport: str = None,
-                           arrival_airport: str = None) -> dict:
+def fetch_status_flightapi(
+    airline: str,
+    flight_number: str,
+    departure_airport: str = None,
+    arrival_airport: str = None,
+) -> dict:
     """
     Call FlightAPI.io /airline endpoint and return a dict:
     {
         "status": "Arrived / Delayed / ...",
-        "estimated_departure": "HH:MM, Mon DD" or None,
-        "estimated_arrival": "HH:MM, Mon DD" or None
-    }
-
-    Handles the shape you posted:
-
-    {
-      "flights": [
-        {
-          "airline": "Delta Air Lines",
-          "airlineCode": "DL",
-          "flightNumber": 3758,
-          "status": 2,
-          "displayStatus": "Arrived",
-          "departureTime": "...",
-          "departureAirportCode": "ATL",
-          "arrivalTime": "...",
-          "arrivalAirportCode": "SHV",
-          ...
-        },
-        ...
-      ],
-      "flight": null,
-      "emptyResults": false
+        "estimated_departure": "..." or None,
+        "estimated_arrival": "..." or None
     }
     """
     airline_name_param = airline.lower().strip()
@@ -171,7 +156,7 @@ def fetch_status_flightapi(airline: str, flight_number: str,
                 "estimated_arrival": arr_time,
             }
 
-        # Case B: legacy list format (departure / arrival / aircraft / status)
+        # Case B: legacy list format (departure / arrival / status)
         if isinstance(data, list):
             dep_block = {}
             arr_block = {}
@@ -198,7 +183,6 @@ def fetch_status_flightapi(airline: str, flight_number: str,
                 "estimated_arrival": arr_time,
             }
 
-        # Unknown shape
         return {
             "status": "Unknown",
             "estimated_departure": None,
@@ -257,18 +241,11 @@ def get_amadeus_token():
 
 
 def search_lowest_fare_amadeus(origin, destination, departure_date, return_date):
-    """
-    Search lowest roundtrip fare using Amadeus.
-    Returns dict with Price/Currency/Error fields.
-    """
+    """Search lowest roundtrip fare using Amadeus."""
     try:
         token = get_amadeus_token()
     except Exception as e:
-        return {
-            "Origin": origin,
-            "Destination": destination,
-            "Error": f"Auth error: {e}",
-        }
+        return {"Origin": origin, "Destination": destination, "Error": f"Auth error: {e}"}
 
     params = {
         "originLocationCode": origin,
@@ -289,20 +266,12 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
             timeout=30,
         )
         if resp.status_code != 200:
-            return {
-                "Origin": origin,
-                "Destination": destination,
-                "Error": f"API error {resp.status_code}",
-            }
+            return {"Origin": origin, "Destination": destination, "Error": f"API error {resp.status_code}"}
 
         data = resp.json()
         offers = data.get("data", [])
         if not offers:
-            return {
-                "Origin": origin,
-                "Destination": destination,
-                "Error": "No fares found",
-            }
+            return {"Origin": origin, "Destination": destination, "Error": "No fares found"}
 
         offer = offers[0]
         price_info = offer.get("price", {})
@@ -320,11 +289,180 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
         }
 
     except Exception as e:
-        return {
-            "Origin": origin,
-            "Destination": destination,
-            "Error": f"Request error: {e}",
-        }
+        return {"Origin": origin, "Destination": destination, "Error": f"Request error: {e}"}
+
+
+# ============================================================
+# K9SAR (Hidden iPhone Tab + Login + GPS/Map via template)
+# ============================================================
+K9SAR_CODE = os.getenv("K9SAR_CODE", "1234")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+# On Render, you should use a persistent disk and point this to it, e.g.
+# K9SAR_DB_PATH=/var/data/k9sar.db
+K9SAR_DB_PATH = os.getenv("K9SAR_DB_PATH", "k9sar.db")
+
+
+def k9sar_db():
+    conn = sqlite3.connect(K9SAR_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def k9sar_init_db():
+    with k9sar_db() as conn:
+        conn.execute(
+            """
+        CREATE TABLE IF NOT EXISTS k9_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dog_name TEXT NOT NULL,
+            notes TEXT,
+            start_time TEXT NOT NULL,
+            stop_time TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL,
+            distance_miles REAL NOT NULL,
+            start_lat REAL,
+            start_lng REAL,
+            end_lat REAL,
+            end_lng REAL,
+            track_json TEXT,     -- list of {lat,lng,ts}
+            weather_json TEXT,   -- raw weather snapshot
+            created_at TEXT NOT NULL
+        );
+        """
+        )
+
+
+k9sar_init_db()
+
+
+def k9sar_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get("k9sar_ok") is True:
+            return f(*args, **kwargs)
+        return redirect(url_for("k9sar_login", next=request.path))
+
+    return wrapper
+
+
+@app.route("/K9sar-login", methods=["GET", "POST"])
+def k9sar_login():
+    error = None
+    if request.method == "POST":
+        code = (request.form.get("code") or "").strip()
+        if code == K9SAR_CODE:
+            session["k9sar_ok"] = True
+            # session cookie => lasts until browser/tab is closed
+            nxt = request.args.get("next") or "/K9sar"
+            return redirect(nxt)
+        error = "Incorrect code"
+    return render_template("k9sar_login.html", error=error)
+
+
+@app.get("/K9sar-logout")
+def k9sar_logout():
+    session.pop("k9sar_ok", None)
+    return redirect("/K9sar-login")
+
+
+@app.get("/K9sar")
+@k9sar_required
+def k9sar_page():
+    # Hidden page – do not link this anywhere in your UI
+    return render_template("k9sar.html")
+
+
+def fetch_weather(lat: float, lng: float):
+    """
+    Note: Websites cannot read Apple Weather directly.
+    Standard approach is phone GPS -> server fetch weather by coords.
+    """
+    if not OPENWEATHER_API_KEY:
+        return {"error": "OPENWEATHER_API_KEY not set"}
+
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {"lat": lat, "lon": lng, "appid": OPENWEATHER_API_KEY, "units": "imperial"}
+    r = requests.get(url, params=params, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+@app.get("/api/k9sar/sessions")
+@k9sar_required
+def k9sar_list_sessions():
+    limit = int(request.args.get("limit", 50))
+    with k9sar_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, dog_name, start_time, stop_time, duration_seconds, distance_miles
+            FROM k9_sessions
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/k9sar/sessions")
+@k9sar_required
+def k9sar_create_session():
+    data = request.get_json(force=True)
+
+    dog_name = (data.get("dog_name") or "").strip()
+    if not dog_name:
+        return jsonify({"error": "dog_name is required"}), 400
+
+    start_time = data.get("start_time")
+    stop_time = data.get("stop_time")
+    duration_seconds = int(data.get("duration_seconds") or 0)
+    distance_miles = float(data.get("distance_miles") or 0.0)
+
+    start_lat = data.get("start_lat")
+    start_lng = data.get("start_lng")
+    end_lat = data.get("end_lat")
+    end_lng = data.get("end_lng")
+
+    notes = data.get("notes") or ""
+    track = data.get("track") or []
+
+    weather = None
+    try:
+        if end_lat is not None and end_lng is not None:
+            weather = fetch_weather(float(end_lat), float(end_lng))
+    except Exception as e:
+        weather = {"error": str(e)}
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with k9sar_db() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO k9_sessions
+            (dog_name, notes, start_time, stop_time, duration_seconds, distance_miles,
+             start_lat, start_lng, end_lat, end_lng, track_json, weather_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                dog_name,
+                notes,
+                start_time,
+                stop_time,
+                duration_seconds,
+                distance_miles,
+                start_lat,
+                start_lng,
+                end_lat,
+                end_lng,
+                json.dumps(track),
+                json.dumps(weather) if weather is not None else None,
+                now,
+            ),
+        )
+        session_id = cur.lastrowid
+
+    return jsonify({"ok": True, "id": session_id})
 
 
 # ==============================
@@ -492,44 +630,23 @@ def flight_analysis():
     analysis_results = None
 
     if request.method == "POST":
-        origins = [
-            o.strip().upper()
-            for o in request.form.getlist("origins")
-            if o.strip()
-        ]
-        destinations = [
-            d.strip().upper()
-            for d in request.form.getlist("destinations")
-            if d.strip()
-        ]
+        origins = [o.strip().upper() for o in request.form.getlist("origins") if o.strip()]
+        destinations = [d.strip().upper() for d in request.form.getlist("destinations") if d.strip()]
         outbound_date = request.form.get("outbound_date", "").strip()
         return_date = request.form.get("return_date", "").strip()
 
         if not origins or not destinations:
             flash("Please enter at least one origin and one destination.")
-            return render_template(
-                "flight_analysis.html",
-                company=company,
-                analysis_results=None,
-            )
+            return render_template("flight_analysis.html", company=company, analysis_results=None)
 
         if not outbound_date or not return_date:
             flash("Please select both outbound and return dates.")
-            return render_template(
-                "flight_analysis.html",
-                company=company,
-                analysis_results=None,
-            )
+            return render_template("flight_analysis.html", company=company, analysis_results=None)
 
         results = []
         for origin in origins:
             for dest in destinations:
-                r = search_lowest_fare_amadeus(
-                    origin,
-                    dest,
-                    outbound_date,
-                    return_date,
-                )
+                r = search_lowest_fare_amadeus(origin, dest, outbound_date, return_date)
                 results.append(
                     {
                         "Origin": origin,
@@ -545,11 +662,7 @@ def flight_analysis():
         analysis_results = results
         last_analysis_results = results
 
-    return render_template(
-        "flight_analysis.html",
-        company=company,
-        analysis_results=analysis_results,
-    )
+    return render_template("flight_analysis.html", company=company, analysis_results=analysis_results)
 
 
 @app.route("/download-analysis")
@@ -572,7 +685,3 @@ def download_analysis():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
