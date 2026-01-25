@@ -8,7 +8,7 @@ from io import BytesIO
 
 import pandas as pd
 import requests
-import pytz
+from zoneinfo import ZoneInfo
 from flask import (
     Flask,
     render_template,
@@ -98,7 +98,7 @@ def fetch_status_flightapi(
     airline_name_param = (airline or "").lower().strip()
     flight_number = str(flight_number).strip()
 
-    central = pytz.timezone("America/Chicago")
+    central = ZoneInfo("America/Chicago")
     today_central = datetime.now(central)
     date_param = today_central.strftime("%Y%m%d")
 
@@ -159,7 +159,7 @@ def fetch_status_flightapi(
             dep = merged.get("departure") or {}
             arr = merged.get("arrival") or {}
 
-            # Use "estimatedTime" if present; otherwise fall back to "scheduledTime"
+            # Prefer estimatedTime -> scheduledTime -> ISO datetime
             est_dep = None
             est_arr = None
             if isinstance(dep, dict):
@@ -267,7 +267,7 @@ def search_lowest_fare_amadeus(origin, destination, departure_date, return_date)
 
 
 # =====================================================
-# HOME PAGE (GET + POST)  ✅ Fixes 405
+# HOME PAGE (GET + POST)
 # =====================================================
 @app.route("/", methods=["GET", "POST"])
 def home():
@@ -318,12 +318,7 @@ def flight_status():
                 missing = [c for c in required_cols if c not in df.columns]
                 if missing:
                     flash(f"Missing columns in file: {missing}")
-                    return render_template(
-                        "flight_status.html",
-                        company=company,
-                        flight_info=None,
-                        uploaded_results=None,
-                    )
+                    return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
 
                 rows = []
                 for _, row in df.iterrows():
@@ -351,12 +346,7 @@ def flight_status():
 
             except Exception as e:
                 flash(f"Error processing file: {e}")
-                return render_template(
-                    "flight_status.html",
-                    company=company,
-                    flight_info=None,
-                    uploaded_results=None,
-                )
+                return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
 
         else:
             airline = request.form.get("airline", "").strip().upper()
@@ -366,12 +356,7 @@ def flight_status():
 
             if not all([airline, flight_number, departure, arrival]):
                 flash("All fields are required.")
-                return render_template(
-                    "flight_status.html",
-                    company=company,
-                    flight_info=None,
-                    uploaded_results=None,
-                )
+                return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
 
             api_result = fetch_status_flightapi(airline, flight_number, departure, arrival)
 
@@ -387,12 +372,7 @@ def flight_status():
 
             last_status_results = [flight_info]
 
-    return render_template(
-        "flight_status.html",
-        company=company,
-        flight_info=flight_info,
-        uploaded_results=uploaded_results,
-    )
+    return render_template("flight_status.html", company=company, flight_info=flight_info, uploaded_results=uploaded_results)
 
 
 @app.get("/download-status")
@@ -533,7 +513,6 @@ def k9sar_required(f):
         if session.get("k9sar_ok"):
             return f(*args, **kwargs)
         return redirect(url_for("k9sar_login"))
-
     return wrapper
 
 
