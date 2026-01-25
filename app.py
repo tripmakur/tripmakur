@@ -73,10 +73,29 @@ def map_status_code(code):
     return mapping.get(code, "Unknown")
 
 
-def fetch_status_flightapi(airline: str, flight_number: str,
-                           departure_airport: str = None,
-                           arrival_airport: str = None) -> dict:
-    airline_name_param = airline.lower().strip()
+def merge_kv_list(payload):
+    """
+    FlightAPI sometimes returns a list of single-key dicts:
+      [ {"departure": {...}}, {"arrival": {...}}, {"aircraft": {...}}, {"status": "Scheduled"} ]
+    Convert that into one dict:
+      {"departure": {...}, "arrival": {...}, "aircraft": {...}, "status": "Scheduled"}
+    """
+    if isinstance(payload, list):
+        merged = {}
+        for part in payload:
+            if isinstance(part, dict):
+                merged.update(part)
+        return merged
+    return payload
+
+
+def fetch_status_flightapi(
+    airline: str,
+    flight_number: str,
+    departure_airport: str = None,
+    arrival_airport: str = None,
+) -> dict:
+    airline_name_param = (airline or "").lower().strip()
     flight_number = str(flight_number).strip()
 
     central = pytz.timezone("America/Chicago")
@@ -91,12 +110,17 @@ def fetch_status_flightapi(airline: str, flight_number: str,
     try:
         resp = requests.get(url, timeout=20)
         if resp.status_code != 200:
-            return {"status": f"API error {resp.status_code}", "estimated_departure": None, "estimated_arrival": None}
+            return {
+                "status": f"API error {resp.status_code}",
+                "estimated_departure": None,
+                "estimated_arrival": None,
+            }
 
-        data = resp.json()
+        raw = resp.json()
 
-        if isinstance(data, dict) and "flights" in data:
-            flights = data.get("flights") or []
+        # ---- Shape A: {"flights": [ ... ]} ----
+        if isinstance(raw, dict) and "flights" in raw:
+            flights = raw.get("flights") or []
             if not flights:
                 return {"status": "Not Found", "estimated_departure": None, "estimated_arrival": None}
 
@@ -125,6 +149,28 @@ def fetch_status_flightapi(airline: str, flight_number: str,
                 "status": status_text,
                 "estimated_departure": chosen.get("departureTime"),
                 "estimated_arrival": chosen.get("arrivalTime"),
+            }
+
+        # ---- Shape B: [ {"departure": {...}}, {"arrival": {...}}, {"aircraft": {...}}, {"status": "Scheduled"} ] ----
+        merged = merge_kv_list(raw)
+        if isinstance(merged, dict):
+            status_text = merged.get("status") or merged.get("Status") or "Unknown"
+
+            dep = merged.get("departure") or {}
+            arr = merged.get("arrival") or {}
+
+            # Use "estimatedTime" if present; otherwise fall back to "scheduledTime"
+            est_dep = None
+            est_arr = None
+            if isinstance(dep, dict):
+                est_dep = dep.get("estimatedTime") or dep.get("scheduledTime") or dep.get("departureDateTime")
+            if isinstance(arr, dict):
+                est_arr = arr.get("estimatedTime") or arr.get("scheduledTime") or arr.get("arrivalDateTime")
+
+            return {
+                "status": status_text,
+                "estimated_departure": est_dep,
+                "estimated_arrival": est_arr,
             }
 
         return {"status": "Unknown", "estimated_departure": None, "estimated_arrival": None}
@@ -272,7 +318,12 @@ def flight_status():
                 missing = [c for c in required_cols if c not in df.columns]
                 if missing:
                     flash(f"Missing columns in file: {missing}")
-                    return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
+                    return render_template(
+                        "flight_status.html",
+                        company=company,
+                        flight_info=None,
+                        uploaded_results=None,
+                    )
 
                 rows = []
                 for _, row in df.iterrows():
@@ -300,7 +351,12 @@ def flight_status():
 
             except Exception as e:
                 flash(f"Error processing file: {e}")
-                return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
+                return render_template(
+                    "flight_status.html",
+                    company=company,
+                    flight_info=None,
+                    uploaded_results=None,
+                )
 
         else:
             airline = request.form.get("airline", "").strip().upper()
@@ -310,7 +366,12 @@ def flight_status():
 
             if not all([airline, flight_number, departure, arrival]):
                 flash("All fields are required.")
-                return render_template("flight_status.html", company=company, flight_info=None, uploaded_results=None)
+                return render_template(
+                    "flight_status.html",
+                    company=company,
+                    flight_info=None,
+                    uploaded_results=None,
+                )
 
             api_result = fetch_status_flightapi(airline, flight_number, departure, arrival)
 
@@ -326,7 +387,12 @@ def flight_status():
 
             last_status_results = [flight_info]
 
-    return render_template("flight_status.html", company=company, flight_info=flight_info, uploaded_results=uploaded_results)
+    return render_template(
+        "flight_status.html",
+        company=company,
+        flight_info=flight_info,
+        uploaded_results=uploaded_results,
+    )
 
 
 @app.get("/download-status")
@@ -435,7 +501,8 @@ def k9sar_db():
 
 def k9sar_init_db():
     with k9sar_db() as conn:
-        conn.execute("""
+        conn.execute(
+            """
         CREATE TABLE IF NOT EXISTS k9_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             dog_name TEXT NOT NULL,
@@ -452,7 +519,8 @@ def k9sar_init_db():
             weather_json TEXT,
             created_at TEXT NOT NULL
         );
-        """)
+        """
+        )
         conn.commit()
 
 
@@ -465,6 +533,7 @@ def k9sar_required(f):
         if session.get("k9sar_ok"):
             return f(*args, **kwargs)
         return redirect(url_for("k9sar_login"))
+
     return wrapper
 
 
@@ -496,14 +565,17 @@ def k9sar_page():
 def k9sar_sessions():
     limit = int(request.args.get("limit", 50))
     with k9sar_db() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT id, dog_name, start_time, stop_time, duration_seconds, distance_miles,
                    COALESCE(notes,'') AS notes,
                    substr(COALESCE(notes,''),1,80) AS notes_preview
             FROM k9_sessions
             ORDER BY id DESC
             LIMIT ?
-        """, (limit,)).fetchall()
+        """,
+            (limit,),
+        ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -547,28 +619,31 @@ def k9sar_save_session():
             weather = {"error": str(e)}
 
     with k9sar_db() as conn:
-        conn.execute("""
+        conn.execute(
+            """
         INSERT INTO k9_sessions
         (dog_name, notes, start_time, stop_time,
          duration_seconds, distance_miles,
          start_lat, start_lng, end_lat, end_lng,
          track_json, weather_json, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            data["dog_name"],
-            data.get("notes", ""),
-            data["start_time"],
-            data["stop_time"],
-            int(data.get("duration_seconds") or 0),
-            float(data.get("distance_miles") or 0.0),
-            data.get("start_lat"),
-            data.get("start_lng"),
-            data.get("end_lat"),
-            data.get("end_lng"),
-            json.dumps(data.get("track") or []),
-            json.dumps(weather),
-            datetime.utcnow().isoformat(),
-        ))
+        """,
+            (
+                data["dog_name"],
+                data.get("notes", ""),
+                data["start_time"],
+                data["stop_time"],
+                int(data.get("duration_seconds") or 0),
+                float(data.get("distance_miles") or 0.0),
+                data.get("start_lat"),
+                data.get("start_lng"),
+                data.get("end_lat"),
+                data.get("end_lng"),
+                json.dumps(data.get("track") or []),
+                json.dumps(weather),
+                datetime.utcnow().isoformat(),
+            ),
+        )
         conn.commit()
 
     return jsonify({"ok": True})
@@ -581,22 +656,53 @@ def k9sar_export_csv():
     from io import StringIO
 
     with k9sar_db() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT id, dog_name, notes, start_time, stop_time, duration_seconds, distance_miles,
                    start_lat, start_lng, end_lat, end_lng, weather_json, created_at
             FROM k9_sessions
             ORDER BY id DESC
-        """).fetchall()
+        """
+        ).fetchall()
 
     buf = StringIO()
     w = csv.writer(buf)
-    w.writerow(["id","dog_name","notes","start_time","stop_time","duration_seconds","distance_miles",
-                "start_lat","start_lng","end_lat","end_lng","weather_json","created_at"])
+    w.writerow(
+        [
+            "id",
+            "dog_name",
+            "notes",
+            "start_time",
+            "stop_time",
+            "duration_seconds",
+            "distance_miles",
+            "start_lat",
+            "start_lng",
+            "end_lat",
+            "end_lng",
+            "weather_json",
+            "created_at",
+        ]
+    )
     for r in rows:
         d = dict(r)
-        w.writerow([d.get("id"), d.get("dog_name"), d.get("notes"), d.get("start_time"), d.get("stop_time"),
-                    d.get("duration_seconds"), d.get("distance_miles"), d.get("start_lat"), d.get("start_lng"),
-                    d.get("end_lat"), d.get("end_lng"), d.get("weather_json"), d.get("created_at")])
+        w.writerow(
+            [
+                d.get("id"),
+                d.get("dog_name"),
+                d.get("notes"),
+                d.get("start_time"),
+                d.get("stop_time"),
+                d.get("duration_seconds"),
+                d.get("distance_miles"),
+                d.get("start_lat"),
+                d.get("start_lng"),
+                d.get("end_lat"),
+                d.get("end_lng"),
+                d.get("weather_json"),
+                d.get("created_at"),
+            ]
+        )
 
     return Response(
         buf.getvalue(),
@@ -609,12 +715,14 @@ def k9sar_export_csv():
 @k9sar_required
 def k9sar_export_xlsx():
     with k9sar_db() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(
+            """
             SELECT id, dog_name, notes, start_time, stop_time, duration_seconds, distance_miles,
                    start_lat, start_lng, end_lat, end_lng, weather_json, created_at
             FROM k9_sessions
             ORDER BY id DESC
-        """).fetchall()
+        """
+        ).fetchall()
 
     df = pd.DataFrame([dict(r) for r in rows])
     output = BytesIO()
@@ -638,9 +746,3 @@ def sw():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
-
